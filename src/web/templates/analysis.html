@@ -327,18 +327,40 @@
         .model-status {
             display: flex;
             align-items: center;
-            gap: 8px;
-            margin-top: 8px;
+            gap: 10px;
+            margin-top: 10px;
         }
 
         .status-indicator {
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
+            display: inline-block;
         }
 
-        .status-available { background: #28a745; }
-        .status-unavailable { background: #dc3545; }
+        .status-indicator.status-success {
+            background-color: #28a745;
+        }
+
+        .status-indicator.status-error {
+            background-color: #dc3545;
+        }
+
+        .status-indicator.status-warning {
+            background-color: #ffc107;
+        }
+
+        .status-indicator.status-loading {
+            background-color: #6c757d;
+            animation: pulse 1.5s infinite;
+        }
+
+        .model-details {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+        }
 
         .chart-controls {
             display: flex;
@@ -670,6 +692,7 @@
         let currentVisualization = null;
         let recognition = null;
         let isRecording = false;
+        let currentTableSelection = null;
 
         // Initialize CodeMirror and Speech Recognition
         document.addEventListener('DOMContentLoaded', function() {
@@ -697,242 +720,518 @@
         // Load catalog data
         async function loadCatalogData() {
             try {
-                const response = await fetch('/api/v1/analysis/catalog');
-                const data = await response.json();
-                currentCatalogData = data;
+                showQueryStatus('Loading Unity Catalog data...', 'info');
                 
-                updateCatalogStats(data);
-                renderCatalogTree(data.catalogs);
+                const response = await fetch('/api/v1/analysis/catalog');
+                if (!response.ok) {
+                    throw new Error('Failed to load unified catalog data');
+                }
+                
+                currentCatalogData = await response.json();
+                renderCatalogTree(currentCatalogData);
+                
+                showQueryStatus(`Loaded unified catalog: ${currentCatalogData.total_catalogs} catalogs, ${currentCatalogData.total_schemas} schemas, ${currentCatalogData.total_tables} tables`, 'success');
+                
+                // Update catalog selector in NL query panel
+                updateCatalogSelector();
                 
             } catch (error) {
                 console.error('Error loading catalog data:', error);
-                document.getElementById('catalog-stats').innerHTML = 
-                    '<i class="fas fa-exclamation-triangle me-2"></i>Error loading catalog data';
+                showQueryStatus('Failed to load Unity Catalog data: ' + error.message, 'error');
+                renderErrorMessage('Failed to load Unity Catalog data. Please check the connection.');
             }
         }
 
-        // Update catalog statistics
-        function updateCatalogStats(data) {
-            document.getElementById('catalog-stats').innerHTML = `
-                <i class="fas fa-database me-2"></i>
-                ${data.total_catalogs} catalogs, ${data.total_schemas} schemas, ${data.total_tables} tables
-            `;
-        }
+        // Render catalog tree with Unity Catalog indicators
+        function renderCatalogTree(catalogData) {
+            const treeContainer = document.querySelector('.catalog-tree');
+            if (!treeContainer) return;
 
-        // Render catalog tree
-        function renderCatalogTree(catalogs) {
-            const tree = document.getElementById('catalog-tree');
-            tree.innerHTML = '';
-
-            catalogs.forEach(catalog => {
-                const catalogDiv = document.createElement('div');
-                catalogDiv.className = 'catalog-item';
-                
-                catalogDiv.innerHTML = `
-                    <div class="catalog-header" onclick="toggleCatalog('${catalog.name}')">
-                        <i class="fas fa-database me-2"></i>
-                        ${catalog.name}
-                        <small class="float-end">(${catalog.schemas.length})</small>
+            let html = '';
+            
+            // Add catalog statistics header
+            html += `
+                <div class="catalog-stats mb-3">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="h6 text-primary">${catalogData.total_catalogs}</div>
+                            <small class="text-muted">Catalogs</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h6 text-info">${catalogData.total_schemas}</div>
+                            <small class="text-muted">Schemas</small>
+                        </div>
+                        <div class="col-4">
+                            <div class="h6 text-success">${catalogData.total_tables}</div>
+                            <small class="text-muted">Tables</small>
+                        </div>
                     </div>
-                    <div id="catalog-${catalog.name}" style="display: none;">
-                        ${catalog.schemas.map(schema => `
-                            <div class="schema-item">
-                                <div class="schema-header" onclick="toggleSchema('${catalog.name}', '${schema}')">
-                                    <i class="fas fa-folder me-2"></i>
-                                    ${schema}
-                                </div>
-                                <div id="schema-${catalog.name}-${schema}" style="display: none;">
-                                    <!-- Tables will be loaded here -->
-                                </div>
-                            </div>
-                        `).join('')}
+                    <div class="text-center mt-2">
+                        <span class="badge bg-warning text-dark">
+                            <i class="fas fa-bolt me-1"></i>Trino Enabled
+                        </span>
+                        <span class="badge bg-success">
+                            <i class="fas fa-layer-group me-1"></i>Unity Catalog
+                        </span>
+                    </div>
+                </div>
+            `;
+
+            catalogData.catalogs.forEach(catalog => {
+                // Determine catalog type and icon
+                let catalogIcon = 'fas fa-database';
+                let catalogBadge = '';
+                
+                if (catalog.connector === 'unity_catalog') {
+                    catalogIcon = 'fas fa-layer-group';
+                    catalogBadge = '<span class="badge bg-success ms-1">UC</span>';
+                } else if (catalog.connector === 'mysql_via_unity_catalog') {
+                    catalogIcon = 'fas fa-database';
+                    catalogBadge = '<span class="badge bg-info ms-1">MySQL</span>';
+                } else if (catalog.connector === 'mysql') {
+                    catalogIcon = 'fas fa-database';
+                    catalogBadge = '<span class="badge bg-info ms-1">MySQL</span>';
+                }
+
+                html += `
+                    <div class="catalog-item">
+                        <div class="catalog-header" onclick="toggleCatalog('${catalog.name}')">
+                            <i class="${catalogIcon} me-2"></i>
+                            ${catalog.name}
+                            ${catalogBadge}
+                            <span class="badge bg-warning ms-1">
+                                <i class="fas fa-bolt" title="Trino Enabled"></i>
+                            </span>
+                            <small class="text-light ms-1">(${catalog.schemas.length} schemas)</small>
+                        </div>
+                        <div id="catalog-${catalog.name}" class="catalog-schemas" style="display: none;">
+                            <!-- Schemas will be loaded when expanded -->
+                        </div>
                     </div>
                 `;
-                
-                tree.appendChild(catalogDiv);
             });
+
+            treeContainer.innerHTML = html;
         }
 
-        // Toggle catalog visibility
-        function toggleCatalog(catalogName) {
-            const element = document.getElementById(`catalog-${catalogName}`);
-            if (element.style.display === 'none') {
-                element.style.display = 'block';
-            } else {
-                element.style.display = 'none';
-            }
-        }
+        // Toggle catalog and load schemas
+        async function toggleCatalog(catalogName) {
+            const schemasContainer = document.getElementById(`catalog-${catalogName}`);
+            const isExpanded = schemasContainer.style.display !== 'none';
 
-        // Toggle schema visibility and load tables
-        async function toggleSchema(catalogName, schemaName) {
-            const element = document.getElementById(`schema-${catalogName}-${schemaName}`);
-            
-            if (element.style.display === 'none') {
-                // Load tables if not already loaded
-                if (element.innerHTML.trim() === '<!-- Tables will be loaded here -->') {
-                    await loadTables(catalogName, schemaName);
-                }
-                element.style.display = 'block';
-            } else {
-                element.style.display = 'none';
-            }
-        }
-
-        // Load tables for a schema
-        async function loadTables(catalogName, schemaName) {
-            try {
-                const response = await fetch(`/api/v1/analysis/catalogs/${catalogName}/schemas/${schemaName}/tables`);
-                const tables = await response.json();
-                
-                const element = document.getElementById(`schema-${catalogName}-${schemaName}`);
-                element.innerHTML = tables.map(table => `
-                    <div class="table-item" onclick="selectTable('${catalogName}', '${schemaName}', '${table.name}')">
-                        <i class="fas fa-table me-2"></i>
-                        ${table.name}
-                        <small class="text-muted">(${table.columns.length} cols)</small>
-                    </div>
-                `).join('');
-                
-            } catch (error) {
-                console.error('Error loading tables:', error);
-            }
-        }
-
-        // Select a table and generate sample queries
-        async function selectTable(catalogName, schemaName, tableName) {
-            try {
-                // Highlight selected table
-                document.querySelectorAll('.table-item').forEach(item => {
-                    item.classList.remove('bg-primary', 'text-white');
-                });
-                event.target.classList.add('bg-primary', 'text-white');
-
-                // Generate sample queries
-                const response = await fetch('/api/v1/analysis/sample-queries', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        catalog: catalogName,
-                        schema: schemaName,
-                        table: tableName,
-                        query_types: ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
-                    })
-                });
-
-                const data = await response.json();
-                displaySampleQueries(data);
-
-            } catch (error) {
-                console.error('Error generating sample queries:', error);
-            }
-        }
-
-        // Display sample queries
-        function displaySampleQueries(data) {
-            document.getElementById('selected-table-name').textContent = 
-                `${data.catalog}.${data.schema}.${data.table}`;
-            
-            const sampleQueriesList = document.getElementById('sample-queries-list');
-            sampleQueriesList.innerHTML = data.queries.map(query => `
-                <div class="sample-query-item" onclick="insertQuery(\`${query.query.replace(/`/g, '\\`')}\`)">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="badge bg-secondary">${query.type}</span>
-                        <small class="text-muted">${query.description}</small>
-                    </div>
-                    <pre class="small mt-2 mb-0"><code>${query.query}</code></pre>
-                </div>
-            `).join('');
-
-            document.getElementById('sample-queries-panel').style.display = 'block';
-        }
-
-        // Load cross-catalog examples
-        async function loadCrossCatalogExamples() {
-            try {
-                const response = await fetch('/api/v1/analysis/cross-catalog-examples');
-                const data = await response.json();
-                
-                const examplesList = document.getElementById('cross-catalog-examples-list');
-                examplesList.innerHTML = data.examples.map((example, index) => `
-                    <div class="sample-query-item" onclick="insertQuery(\`${example.query.replace(/`/g, '\\`')}\`)">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <strong class="text-primary">${example.title}</strong>
-                            <small class="text-muted">${example.catalogs.join(' + ')}</small>
-                        </div>
-                        <small class="text-muted">${example.description}</small>
-                    </div>
-                `).join('');
-
-            } catch (error) {
-                console.error('Error loading cross-catalog examples:', error);
-            }
-        }
-
-        // Insert query into editor
-        function insertQuery(query) {
-            queryEditor.setValue(query);
-            queryEditor.focus();
-        }
-
-        // Execute query
-        async function executeQuery() {
-            const query = queryEditor.getValue().trim();
-            
-            if (!query) {
-                alert('Please enter a query to execute');
+            if (isExpanded) {
+                schemasContainer.style.display = 'none';
                 return;
             }
 
-            // Update UI
-            document.getElementById('query-stats').innerHTML = 
-                '<i class="fas fa-spinner fa-spin me-2"></i>Executing query...';
-            document.getElementById('table-results-content').innerHTML = `
-                <div class="text-center text-muted py-5">
-                    <i class="fas fa-spinner fa-spin fa-3x mb-3"></i>
-                    <p>Executing query...</p>
-                </div>
-            `;
+            try {
+                showQueryStatus(`Loading schemas for ${catalogName}...`, 'info');
+                
+                const response = await fetch(`/api/v1/analysis/catalogs/${catalogName}/schemas`);
+                if (!response.ok) {
+                    throw new Error('Failed to load schemas');
+                }
+
+                const schemas = await response.json();
+                
+                let html = '';
+                schemas.forEach(schema => {
+                    html += `
+                        <div class="schema-item">
+                            <div class="schema-header" onclick="toggleSchema('${catalogName}', '${schema.name}')">
+                                <i class="fas fa-folder me-2"></i>
+                                ${schema.name}
+                                <small class="text-light ms-1">(${schema.tables.length} tables)</small>
+                            </div>
+                            <div id="schema-${catalogName}-${schema.name}" class="schema-tables" style="display: none;">
+                                <!-- Tables will be loaded when expanded -->
+                            </div>
+                        </div>
+                    `;
+                });
+
+                schemasContainer.innerHTML = html;
+                schemasContainer.style.display = 'block';
+                
+                showQueryStatus(`Loaded ${schemas.length} schemas for ${catalogName}`, 'success');
+                
+            } catch (error) {
+                console.error('Error loading schemas:', error);
+                showQueryStatus(`Failed to load schemas: ${error.message}`, 'error');
+            }
+        }
+
+        // Toggle schema and load tables
+        async function toggleSchema(catalogName, schemaName) {
+            const tablesContainer = document.getElementById(`schema-${catalogName}-${schemaName}`);
+            const isExpanded = tablesContainer.style.display !== 'none';
+
+            if (isExpanded) {
+                tablesContainer.style.display = 'none';
+                return;
+            }
 
             try {
-                const response = await fetch('/api/v1/analysis/query', {
+                showQueryStatus(`Loading tables for ${catalogName}.${schemaName}...`, 'info');
+                
+                const response = await fetch(`/api/v1/analysis/catalogs/${catalogName}/schemas/${schemaName}/tables`);
+                if (!response.ok) {
+                    throw new Error('Failed to load tables');
+                }
+
+                const tables = await response.json();
+                
+                let html = '';
+                tables.forEach(table => {
+                    html += `
+                        <div class="table-item" onclick="selectTable('${catalogName}', '${schemaName}', '${table.name}')">
+                            <i class="fas fa-table me-2"></i>
+                            ${table.name}
+                            <span class="badge bg-light text-dark ms-1">${table.columns.length} cols</span>
+                            <span class="badge bg-warning ms-1">
+                                <i class="fas fa-bolt" title="Trino Ready"></i>
+                            </span>
+                        </div>
+                    `;
+                });
+
+                tablesContainer.innerHTML = html;
+                tablesContainer.style.display = 'block';
+                
+                showQueryStatus(`Loaded ${tables.length} tables for ${catalogName}.${schemaName}`, 'success');
+                
+            } catch (error) {
+                console.error('Error loading tables:', error);
+                showQueryStatus(`Failed to load tables: ${error.message}`, 'error');
+            }
+        }
+
+        // Select table and generate sample queries
+        async function selectTable(catalogName, schemaName, tableName) {
+            try {
+                showQueryStatus(`Loading table details for ${catalogName}.${schemaName}.${tableName}...`, 'info');
+                
+                // Update current table selection for NL queries
+                currentTableSelection = {
+                    catalog: catalogName,
+                    schema: schemaName,
+                    table: tableName
+                };
+                
+                // Get table info
+                const response = await fetch(`/api/v1/analysis/catalogs/${catalogName}/schemas/${schemaName}/tables/${tableName}`);
+                if (!response.ok) {
+                    throw new Error('Failed to load table info');
+                }
+
+                const tableInfo = await response.json();
+                
+                // Update selected table name
+                document.getElementById('selected-table-name').textContent = `${catalogName}.${schemaName}.${tableName}`;
+                
+                // Generate sample queries
+                generateSampleQueries(catalogName, schemaName, tableName, tableInfo);
+                
+                // Show sample queries panel
+                document.getElementById('sample-queries-panel').style.display = 'block';
+                
+                // Generate a sample SELECT query in the editor
+                const sampleQuery = `-- Unity Catalog Query via Trino Engine
+-- Table: ${catalogName}.${schemaName}.${tableName}
+SELECT * 
+FROM ${catalogName}.${schemaName}.${tableName} 
+LIMIT 100;`;
+                
+                queryEditor.setValue(sampleQuery);
+                
+                showQueryStatus(`Selected table: ${catalogName}.${schemaName}.${tableName} (Trino Ready)`, 'success');
+                
+                // Update placeholder for natural language queries
+                updateNLQueryPlaceholder();
+                
+            } catch (error) {
+                console.error('Error selecting table:', error);
+                showQueryStatus(`Failed to select table: ${error.message}`, 'error');
+            }
+        }
+
+        // Generate sample queries for the selected table
+        async function generateSampleQueries(catalogName, schemaName, tableName, tableInfo) {
+            const queriesContainer = document.getElementById('sample-queries-list');
+            
+            // Generate various query types
+            const sampleQueries = [
+                {
+                    type: 'SELECT',
+                    description: 'Basic data exploration',
+                    query: `SELECT * FROM ${catalogName}.${schemaName}.${tableName} LIMIT 100;`
+                },
+                {
+                    type: 'COUNT',
+                    description: 'Row count analysis',
+                    query: `SELECT COUNT(*) as total_rows FROM ${catalogName}.${schemaName}.${tableName};`
+                },
+                {
+                    type: 'DESCRIBE',
+                    description: 'Table schema information',
+                    query: `DESCRIBE ${catalogName}.${schemaName}.${tableName};`
+                },
+                {
+                    type: 'GROUPBY',
+                    description: 'Aggregation analysis',
+                    query: `SELECT ${tableInfo.columns[0]?.name || 'column1'}, COUNT(*) as count 
+FROM ${catalogName}.${schemaName}.${tableName} 
+GROUP BY ${tableInfo.columns[0]?.name || 'column1'} 
+ORDER BY count DESC 
+LIMIT 20;`
+                }
+            ];
+
+            // Add column-specific queries if available
+            if (tableInfo.columns && tableInfo.columns.length > 0) {
+                const numericColumns = tableInfo.columns.filter(col => 
+                    col.type.toLowerCase().includes('int') || 
+                    col.type.toLowerCase().includes('decimal') || 
+                    col.type.toLowerCase().includes('double') ||
+                    col.type.toLowerCase().includes('float')
+                );
+
+                if (numericColumns.length > 0) {
+                    sampleQueries.push({
+                        type: 'STATS',
+                        description: 'Statistical analysis',
+                        query: `SELECT 
+    MIN(${numericColumns[0].name}) as min_value,
+    MAX(${numericColumns[0].name}) as max_value,
+    AVG(${numericColumns[0].name}) as avg_value,
+    COUNT(DISTINCT ${numericColumns[0].name}) as unique_values
+FROM ${catalogName}.${schemaName}.${tableName};`
+                    });
+                }
+            }
+
+            let html = '';
+            sampleQueries.forEach(query => {
+                html += `
+                    <div class="sample-query-item" onclick="loadQueryIntoEditor('${query.query.replace(/'/g, "\\'")}')">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>${query.type}</strong>
+                                <small class="text-muted ms-2">${query.description}</small>
+                            </div>
+                            <span class="badge bg-warning">
+                                <i class="fas fa-bolt"></i> Trino
+                            </span>
+                        </div>
+                        <pre class="mt-2 mb-0"><code>${query.query}</code></pre>
+                    </div>
+                `;
+            });
+
+            queriesContainer.innerHTML = html;
+        }
+
+        // Load query into editor
+        function loadQueryIntoEditor(query) {
+            queryEditor.setValue(query);
+        }
+
+        // Execute SQL query using Trino via Unity Catalog
+        async function executeSQL() {
+            const query = queryEditor.getValue().trim();
+            if (!query) {
+                showQueryStatus('Please enter a SQL query', 'warning');
+                return;
+            }
+
+            try {
+                showQueryStatus('Executing SQL via Trino engine...', 'info');
+                
+                // Get current catalog and schema from query or use default
+                const currentCatalog = extractCatalogFromQuery(query);
+                const currentSchema = extractSchemaFromQuery(query);
+                
+                const startTime = Date.now();
+                
+                const response = await fetch('/api/v1/analysis/execute-sql', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        query: query,
-                        limit: 1000
+                        sql_query: query,
+                        catalog: currentCatalog,
+                        schema: currentSchema
                     })
                 });
 
-                const result = await response.json();
-                currentQueryResult = result;
-                displayQueryResults(result);
-
-                // Get visualization recommendation if we have data
-                if (result.data && result.data.length > 0) {
-                    await getVisualizationRecommendation(result);
+                if (!response.ok) {
+                    throw new Error('Failed to execute SQL query');
                 }
 
+                const result = await response.json();
+                const executionTime = Date.now() - startTime;
+                
+                if (result.success) {
+                    currentQueryResult = result.query_result;
+                    displayQueryResults(result.query_result, result.visualization_recommendation);
+                    
+                    showQueryStatus(`Query executed successfully via Trino: ${result.query_result.row_count} rows in ${result.execution_time_ms}ms`, 'success');
+                    
+                    // Show results panel
+                    document.getElementById('query-results').style.display = 'block';
+                } else {
+                    showQueryStatus(`Query failed: ${result.error}`, 'error');
+                    displayQueryError(result.error);
+                }
+                
             } catch (error) {
-                console.error('Error executing query:', error);
-                document.getElementById('table-results-content').innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Error executing query: ${error.message}
-                    </div>
-                `;
+                console.error('Error executing SQL:', error);
+                showQueryStatus(`SQL execution failed: ${error.message}`, 'error');
+                displayQueryError(error.message);
             }
         }
 
-        // Display query results
-        function displayQueryResults(result) {
+        // Execute query (alias for executeSQL for backward compatibility)
+        async function executeQuery() {
+            await executeSQL();
+        }
+
+        // Utility functions for Unity Catalog integration
+        function extractCatalogFromQuery(query) {
+            // Extract catalog from query like: SELECT * FROM catalog.schema.table
+            // Support various patterns: FROM catalog.schema.table, JOIN catalog.schema.table, etc.
+            const patterns = [
+                /FROM\s+([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*/gi,
+                /JOIN\s+([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*/gi,
+                /UPDATE\s+([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*/gi,
+                /INSERT\s+INTO\s+([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*/gi
+            ];
+            
+            for (const pattern of patterns) {
+                const match = query.match(pattern);
+                if (match) {
+                    // Extract just the catalog name from the full match
+                    const catalogMatch = match[0].match(/([a-zA-Z_][a-zA-Z0-9_]*)\./);
+                    if (catalogMatch) {
+                        console.log(`Extracted catalog: ${catalogMatch[1]}`);
+                        return catalogMatch[1];
+                    }
+                }
+            }
+            
+            console.log('No catalog found in query, returning null');
+            return null;
+        }
+
+        function extractSchemaFromQuery(query) {
+            // Extract schema from query like: SELECT * FROM catalog.schema.table
+            const patterns = [
+                /FROM\s+[a-zA-Z_][a-zA-Z0-9_]*\.([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*/gi,
+                /JOIN\s+[a-zA-Z_][a-zA-Z0-9_]*\.([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*/gi,
+                /UPDATE\s+[a-zA-Z_][a-zA-Z0-9_]*\.([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*/gi,
+                /INSERT\s+INTO\s+[a-zA-Z_][a-zA-Z0-9_]*\.([a-zA-Z_][a-zA-Z0-9_]*)\.[a-zA-Z_][a-zA-Z0-9_]*/gi
+            ];
+            
+            for (const pattern of patterns) {
+                const match = query.match(pattern);
+                if (match) {
+                    // Extract the schema part
+                    const schemaMatch = match[0].match(/[a-zA-Z_][a-zA-Z0-9_]*\.([a-zA-Z_][a-zA-Z0-9_]*)\./);
+                    if (schemaMatch) {
+                        console.log(`Extracted schema: ${schemaMatch[1]}`);
+                        return schemaMatch[1];
+                    }
+                }
+            }
+            
+            console.log('No schema found in query, returning null');
+            return null;
+        }
+
+        function showQueryStatus(message, type = 'info') {
+            const statusEl = document.getElementById('query-status');
+            if (!statusEl) return;
+            
+            statusEl.style.display = 'block';
+            
+            let iconClass = 'fas fa-info-circle';
+            let textClass = 'text-info';
+            
+            switch (type) {
+                case 'success':
+                    iconClass = 'fas fa-check-circle';
+                    textClass = 'text-success';
+                    break;
+                case 'error':
+                    iconClass = 'fas fa-exclamation-triangle';
+                    textClass = 'text-danger';
+                    break;
+                case 'warning':
+                    iconClass = 'fas fa-exclamation-triangle';
+                    textClass = 'text-warning';
+                    break;
+                case 'info':
+                default:
+                    iconClass = 'fas fa-spinner fa-spin';
+                    textClass = 'text-info';
+                    break;
+            }
+            
+            statusEl.innerHTML = `<i class="${iconClass} me-1"></i>${message}`;
+            statusEl.className = `small mt-2 ${textClass}`;
+            
+            // Auto-hide success messages after 3 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        function renderErrorMessage(message) {
+            const treeContainer = document.querySelector('.catalog-tree');
+            if (!treeContainer) return;
+            
+            treeContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Unity Catalog Error</strong><br>
+                    ${message}
+                    <br><br>
+                    <button class="btn btn-sm btn-outline-danger" onclick="loadCatalogData()">
+                        <i class="fas fa-refresh me-1"></i>Retry
+                    </button>
+                </div>
+            `;
+        }
+
+        function updateCatalogSelector() {
+            // This would update a catalog selector in the NL query panel
+            // Implementation depends on the UI design
+            console.log('Updating catalog selector for NL queries');
+            
+            // Update the natural language query input placeholder with context
+            updateNLQueryPlaceholder();
+        }
+
+        function updateNLQueryPlaceholder() {
+            const nlQueryInput = document.getElementById('nl-query-input');
+            if (!nlQueryInput) return;
+            
+            if (currentTableSelection) {
+                nlQueryInput.placeholder = `Ask about ${currentTableSelection.catalog}.${currentTableSelection.schema}.${currentTableSelection.table} - e.g., "Show me the top 10 rows" or "What columns does this table have?"`;
+            } else {
+                nlQueryInput.placeholder = "e.g., 'Show me the top 10 customers by sales' or 'How many employees are in each department?' (Select a table first for better results)";
+            }
+        }
+
+        function displayQueryResults(result, visualizationRecommendation = null) {
             currentQueryResult = result;
             
             if (!result || !result.columns || !result.data) {
-                document.getElementById('table-results-content').innerHTML = '<div class="alert alert-warning">No data to display</div>';
+                document.getElementById('table-results-content').innerHTML = 
+                    '<div class="alert alert-warning">No data to display</div>';
                 return;
             }
 
@@ -940,10 +1239,13 @@
             document.getElementById('query-stats').innerHTML = `
                 <i class="fas fa-check-circle text-success me-1"></i>
                 ${result.row_count} rows in ${result.execution_time_ms.toFixed(1)}ms
+                <span class="badge bg-warning ms-2">
+                    <i class="fas fa-bolt me-1"></i>Trino Engine
+                </span>
                 ${result.query_id ? ` | Query ID: ${result.query_id}` : ''}
             `;
             
-            // Create table HTML for the table results content area
+            // Create enhanced table HTML
             let tableHtml = `
                 <div class="table-responsive">
                     <table class="table table-hover table-sm">
@@ -961,7 +1263,8 @@
             result.data.forEach(row => {
                 tableHtml += '<tr>';
                 row.forEach(cell => {
-                    const cellValue = cell === null || cell === undefined ? '<em class="text-muted">NULL</em>' : String(cell);
+                    const cellValue = cell === null || cell === undefined ? 
+                        '<em class="text-muted">NULL</em>' : String(cell);
                     tableHtml += `<td>${cellValue}</td>`;
                 });
                 tableHtml += '</tr>';
@@ -974,8 +1277,8 @@
                 <div class="mt-3">
                     <small class="text-muted">
                         <i class="fas fa-info-circle me-1"></i>
-                        Showing ${result.row_count} rows
-                        ${result.query_id ? ` | Query executed with ID: ${result.query_id}` : ''}
+                        Showing ${result.row_count} rows via Unity Catalog + Trino Engine
+                        ${result.query_id ? ` | Query ID: ${result.query_id}` : ''}
                     </small>
                 </div>
             `;
@@ -983,110 +1286,76 @@
             // Update the table results content
             document.getElementById('table-results-content').innerHTML = tableHtml;
             
-            // Ensure table view is active first
+            // Ensure table view is active initially
             switchResultsTab('table');
             
-            // Smooth scroll to results and visual feedback
+            // Generate visualization automatically
             setTimeout(() => {
-                const resultsPanel = document.querySelector('.results-panel');
-                if (resultsPanel) {
-                    resultsPanel.scrollIntoView({ 
-                        behavior: 'smooth', 
-                        block: 'start',
-                        inline: 'nearest'
-                    });
-                    
-                    // Add visual highlight with animation
-                    resultsPanel.style.transition = 'box-shadow 0.3s ease-in-out, border-color 0.3s ease-in-out';
-                    resultsPanel.style.boxShadow = '0 0 20px rgba(0, 123, 255, 0.3)';
-                    resultsPanel.style.borderColor = '#007bff';
-                    
-                    // Show success toast notification
-                    showResultsNotification(`✅ Query results displayed: ${result.row_count} rows`, 'success');
-                    
-                    // Reset highlight after animation
-                    setTimeout(() => {
-                        resultsPanel.style.boxShadow = '';
-                        resultsPanel.style.borderColor = '#dee2e6';
-                    }, 2000);
-                }
+                generateVisualization(result);
             }, 100);
             
-            // Automatically generate visualization recommendation if we have data
-            if (result.data.length > 0) {
-                setTimeout(() => getVisualizationRecommendation(result), 300);
+            // Show visualization recommendation if available (from external API)
+            if (visualizationRecommendation) {
+                setTimeout(() => {
+                    showVisualizationRecommendation(visualizationRecommendation);
+                }, 300);
             }
         }
 
-        // Show results notification
-        function showResultsNotification(message, type = 'info') {
-            // Remove existing notifications
-            const existingNotifications = document.querySelectorAll('.results-notification');
-            existingNotifications.forEach(notification => notification.remove());
-            
-            // Determine alert class based on type
-            let alertClass = 'alert-info';
-            if (type === 'success') alertClass = 'alert-success';
-            else if (type === 'error' || type === 'danger') alertClass = 'alert-danger';
-            else if (type === 'warning') alertClass = 'alert-warning';
-            
-            // Create notification element
-            const notification = document.createElement('div');
-            notification.className = `alert ${alertClass} results-notification`;
-            notification.style.cssText = `
-                position: fixed;
-                top: 80px;
-                right: 20px;
-                z-index: 1060;
-                min-width: 300px;
-                opacity: 0;
-                transform: translateX(100%);
-                transition: all 0.3s ease-in-out;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            `;
-            notification.innerHTML = `
-                <div class="d-flex align-items-center">
-                    <span class="me-auto">${message}</span>
-                    <button type="button" class="btn-close ms-2" onclick="this.parentElement.parentElement.remove()"></button>
+        function displayQueryError(error) {
+            const resultsContent = document.getElementById('table-results-content');
+            resultsContent.innerHTML = `
+                <div class="alert alert-danger">
+                    <h6><i class="fas fa-exclamation-triangle me-2"></i>Trino Query Error</h6>
+                    <pre class="mt-2 mb-0">${error}</pre>
+                </div>
+                
+                <div class="mt-3">
+                    <h6>Troubleshooting Tips:</h6>
+                    <ul>
+                        <li>Check table and column names in your Unity Catalog</li>
+                        <li>Ensure proper catalog.schema.table naming convention</li>
+                        <li>Verify SQL syntax is compatible with Trino engine</li>
+                        <li>Check if the data source is properly integrated with Unity Catalog</li>
+                    </ul>
                 </div>
             `;
             
-            // Add to page
-            document.body.appendChild(notification);
-            
-            // Animate in
-            setTimeout(() => {
-                notification.style.opacity = '1';
-                notification.style.transform = 'translateX(0)';
-            }, 10);
-            
-            // Auto remove after 4 seconds (longer for error/warning)
-            const autoRemoveDelay = (type === 'error' || type === 'warning') ? 6000 : 4000;
-            setTimeout(() => {
-                notification.style.opacity = '0';
-                notification.style.transform = 'translateX(100%)';
-                setTimeout(() => notification.remove(), 300);
-            }, autoRemoveDelay);
+            // Show the results panel
+            document.getElementById('query-results').style.display = 'block';
         }
 
-        // Utility function to ensure content is fully visible
-        function ensureFullContentVisible(element, additionalOffset = 100) {
-            if (!element) return;
-            
-            setTimeout(() => {
-                const elementRect = element.getBoundingClientRect();
-                const elementBottom = elementRect.bottom;
-                const viewportHeight = window.innerHeight;
+        // Load cross-catalog examples
+        async function loadCrossCatalogExamples() {
+            try {
+                const response = await fetch('/api/v1/analysis/cross-catalog-examples');
+                const data = await response.json();
                 
-                // Check if element bottom is outside viewport
-                if (elementBottom > viewportHeight) {
-                    const scrollAmount = elementBottom - viewportHeight + additionalOffset;
-                    window.scrollBy({
-                        top: scrollAmount,
-                        behavior: 'smooth'
-                    });
-                }
-            }, 100);
+                const examplesList = document.getElementById('cross-catalog-examples-list');
+                examplesList.innerHTML = data.examples.map((example, index) => `
+                    <div class="sample-query-item" onclick="loadQueryIntoEditor('${example.query.replace(/'/g, "\\'")}')">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <strong class="text-primary">${example.title}</strong>
+                            <div>
+                                <small class="text-muted me-2">${example.catalogs.join(' + ')}</small>
+                                <span class="badge bg-warning">
+                                    <i class="fas fa-bolt"></i> Trino
+                                </span>
+                            </div>
+                        </div>
+                        <small class="text-muted">${example.description}</small>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading cross-catalog examples:', error);
+                document.getElementById('cross-catalog-examples-list').innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Cross-catalog examples will be available when Unity Catalog is fully configured.
+                    </div>
+                `;
+            }
         }
 
         // Clear query
@@ -1095,7 +1364,7 @@
             queryEditor.focus();
         }
 
-        // Format query (basic)
+        // Format query (basic SQL formatting)
         function formatQuery() {
             const query = queryEditor.getValue();
             // Basic SQL formatting
@@ -1116,179 +1385,11 @@
             queryEditor.setValue(formatted);
         }
 
-        // Refresh catalog
-        function refreshCatalog() {
-            loadCatalogData();
-        }
-
-        // Initialize Speech Recognition
-        function initializeSpeechRecognition() {
-            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                recognition = new SpeechRecognition();
-                recognition.continuous = false;
-                recognition.interimResults = false;
-                recognition.lang = 'en-US';
-
-                recognition.onstart = function() {
-                    isRecording = true;
-                    document.getElementById('voice-button').classList.add('recording');
-                    document.getElementById('voice-button').innerHTML = '<i class="fas fa-stop"></i>';
-                    showNLQueryStatus('Listening... Speak your query now.');
-                };
-
-                recognition.onresult = function(event) {
-                    const transcript = event.results[0][0].transcript;
-                    document.getElementById('nl-query-input').value = transcript;
-                    showNLQueryStatus(`Heard: "${transcript}"`);
-                };
-
-                recognition.onend = function() {
-                    isRecording = false;
-                    document.getElementById('voice-button').classList.remove('recording');
-                    document.getElementById('voice-button').innerHTML = '<i class="fas fa-microphone"></i>';
-                    hideNLQueryStatus();
-                };
-
-                recognition.onerror = function(event) {
-                    showNLQueryStatus('Speech recognition error: ' + event.error, 'error');
-                    setTimeout(hideNLQueryStatus, 3000);
-                };
-            } else {
-                // Hide voice button if speech recognition is not supported
-                document.getElementById('voice-button').style.display = 'none';
-            }
-        }
-
-        // Toggle voice input
-        function toggleVoiceInput() {
-            if (!recognition) return;
-            
-            if (isRecording) {
-                recognition.stop();
-            } else {
-                recognition.start();
-            }
-        }
-
-        // Show/hide NL query status
-        function showNLQueryStatus(message, type = 'info') {
-            const statusEl = document.getElementById('nl-query-status');
-            statusEl.innerHTML = `<i class="fas fa-${type === 'error' ? 'exclamation-triangle' : 'info-circle'} me-1"></i>${message}`;
-            statusEl.className = `small mt-2 text-${type === 'error' ? 'danger' : 'muted'}`;
-            statusEl.style.display = 'block';
-        }
-
-        function hideNLQueryStatus() {
-            document.getElementById('nl-query-status').style.display = 'none';
-        }
-
-        // Handle Enter key in NL query input
-        function handleNLQueryKeyPress(event) {
-            if (event.key === 'Enter') {
-                executeNaturalLanguageQuery();
-            }
-        }
-
-        // Execute natural language query
-        async function executeNaturalLanguageQuery() {
-            const query = document.getElementById('nl-query-input').value.trim();
-            
-            if (!query) {
-                alert('Please enter a natural language query');
-                return;
-            }
-
-            const statusEl = document.getElementById('nl-query-status');
-            statusEl.style.display = 'block';
-            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Converting natural language to SQL...';
-
-            try {
-                const selectedModel = document.getElementById('model-selector').value;
-                
-                const response = await fetch('/api/v1/analysis/chat-query', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        query: query,
-                        model_key: selectedModel || null
-                    })
-                });
-
-                // Get response text first
-                const responseText = await response.text();
-                
-                if (response.ok) {
-                    try {
-                        // Try to parse as JSON
-                        const result = JSON.parse(responseText);
-                        
-                        // Set the converted SQL in the editor
-                        if (result.nl_response && result.nl_response.sql_query) {
-                            queryEditor.setValue(result.nl_response.sql_query);
-                            
-                            statusEl.innerHTML = `
-                                <i class="fas fa-check-circle text-success me-1"></i>
-                                Query converted successfully! 
-                                <small>(Confidence: ${(result.nl_response.confidence * 100).toFixed(1)}%)</small>
-                                <br><small class="text-muted">${result.nl_response.explanation}</small>
-                            `;
-                            
-                            // Show notes if any
-                            if (result.notes && result.notes.length > 0) {
-                                statusEl.innerHTML += `<br><small class="text-warning"><i class="fas fa-info-circle me-1"></i>${result.notes.join(', ')}</small>`;
-                            }
-                        }
-                        
-                        // If query was executed and has results, show them
-                        if (result.query_result && result.query_result.data) {
-                            displayQueryResults(result.query_result);
-                            
-                            // Show visualization if available
-                            if (result.visualization_recommendation) {
-                                showVisualizationRecommendation(result.visualization_recommendation);
-                            }
-                        }
-                    } catch (parseError) {
-                        // Response is not JSON
-                        statusEl.innerHTML = `
-                            <i class="fas fa-exclamation-triangle text-warning me-1"></i>
-                            Server returned non-JSON response: ${responseText.substring(0, 100)}...
-                        `;
-                    }
-                } else {
-                    // Handle error responses
-                    if (responseText.includes('Internal Server Error')) {
-                        statusEl.innerHTML = `
-                            <i class="fas fa-times-circle text-danger me-1"></i>
-                            Internal server error occurred. This may be due to missing API keys or database connection issues.
-                            <br><small class="text-muted">Please check server configuration and try again.</small>
-                        `;
-                    } else {
-                        try {
-                            const errorData = JSON.parse(responseText);
-                            const errorMessage = errorData.detail || errorData.message || 'Server error';
-                            statusEl.innerHTML = `
-                                <i class="fas fa-times-circle text-danger me-1"></i>
-                                Error: ${errorMessage}
-                            `;
-                        } catch (parseError) {
-                            statusEl.innerHTML = `
-                                <i class="fas fa-times-circle text-danger me-1"></i>
-                                Error: ${responseText.substring(0, 200)}
-                            `;
-                        }
-                    }
-                }
-
-            } catch (error) {
-                console.error('Error with natural language query:', error);
-                statusEl.innerHTML = `
-                    <i class="fas fa-times-circle text-danger me-1"></i>
-                    Network error: ${error.message}
-                `;
+        // Handle Ctrl+Enter or Cmd+Enter to execute SQL
+        function handleSQLKeyPress(event) {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                executeSQL();
             }
         }
 
@@ -1296,775 +1397,971 @@
         function switchResultsTab(tabName) {
             // Update tab appearance
             document.querySelectorAll('.results-tab').forEach(tab => tab.classList.remove('active'));
-            document.getElementById(tabName + '-tab').classList.add('active');
+            const targetTab = document.getElementById(tabName + '-tab');
+            if (targetTab) targetTab.classList.add('active');
             
             // Update header title based on selected tab
             const headerTitle = document.querySelector('.results-panel h6');
             if (headerTitle) {
                 if (tabName === 'table') {
-                    headerTitle.innerHTML = '<i class="fas fa-table me-2"></i>Query Results - Table View';
+                    headerTitle.innerHTML = '<i class="fas fa-table me-2"></i>Query Results - Table View (Trino)';
                 } else if (tabName === 'chart') {
-                    headerTitle.innerHTML = '<i class="fas fa-chart-bar me-2"></i>Query Results - Visualization';
+                    headerTitle.innerHTML = '<i class="fas fa-chart-bar me-2"></i>Query Results - Visualization (Trino)';
                 }
             }
             
-            // Switch content with enhanced functionality
+            // Switch content
             if (tabName === 'table') {
                 document.getElementById('table-results-content').style.display = 'block';
                 document.getElementById('chart-results-content').style.display = 'none';
-                
-                // Scroll to table results with proper positioning
-                setTimeout(() => {
-                    const tableContent = document.getElementById('table-results-content');
-                    if (tableContent) {
-                        tableContent.scrollIntoView({ 
-                            behavior: 'smooth', 
-                            block: 'start',
-                            inline: 'nearest'
-                        });
-                        
-                        // Add visual feedback
-                        tableContent.style.transition = 'background-color 0.3s ease-in-out';
-                        tableContent.style.backgroundColor = 'rgba(40, 167, 69, 0.05)';
-                        
-                        showResultsNotification('📋 Switched to table view', 'info');
-                        
-                        setTimeout(() => {
-                            tableContent.style.backgroundColor = '';
-                        }, 1500);
-                    }
-                }, 100);
-                
             } else if (tabName === 'chart') {
                 document.getElementById('table-results-content').style.display = 'none';
                 document.getElementById('chart-results-content').style.display = 'block';
                 
-                // Enhanced scroll to chart results with bottom padding consideration
-                setTimeout(() => {
-                    const chartResultsContent = document.getElementById('chart-results-content');
-                    const chartContainer = document.getElementById('chart-container');
-                    
-                    if (chartResultsContent) {
-                        // Scroll to ensure full content is visible including bottom padding
-                        chartResultsContent.scrollIntoView({ 
-                            behavior: 'smooth', 
-                            block: 'start',
-                            inline: 'nearest'
-                        });
-                        
-                        // Additional scroll to ensure bottom content is visible
-                        setTimeout(() => {
-                            const viewportHeight = window.innerHeight;
-                            const contentHeight = chartResultsContent.offsetHeight;
-                            const currentScrollY = window.scrollY;
-                            
-                            // Calculate if we need additional scroll to see bottom content
-                            const additionalScroll = Math.max(0, contentHeight - viewportHeight + 100);
-                            
-                            if (additionalScroll > 0) {
-                                window.scrollBy({
-                                    top: additionalScroll,
-                                    behavior: 'smooth'
-                                });
-                            }
-                        }, 500);
-                        
-                        // Add visual highlight for chart area
-                        chartResultsContent.style.transition = 'background-color 0.3s ease-in-out, border-color 0.3s ease-in-out';
-                        chartResultsContent.style.backgroundColor = 'rgba(0, 123, 255, 0.05)';
-                        
-                        // Show notification for chart view
-                        showResultsNotification('📊 Switched to visualization view', 'info');
-                        
-                        // Reset highlight
-                        setTimeout(() => {
-                            chartResultsContent.style.backgroundColor = '';
-                        }, 2000);
-                        
-                        // Re-render chart if available (fixes chart display issues)
-                        if (currentVisualization && currentVisualization.config) {
-                            setTimeout(() => {
-                                try {
-                                    renderVisualization(currentVisualization.config);
-                                } catch (error) {
-                                    console.error('Error re-rendering chart:', error);
-                                }
-                            }, 600);
-                        }
-                        
-                        // If no chart is available but we have query results, try to generate one
-                        else if (currentQueryResult && currentQueryResult.data && currentQueryResult.data.length > 0) {
-                            setTimeout(() => {
-                                getVisualizationRecommendation(currentQueryResult);
-                            }, 800);
-                        }
-                    }
-                }, 100);
+                // Generate visualization if not already generated and we have data
+                if (currentQueryResult && !currentVisualization) {
+                    setTimeout(() => {
+                        generateVisualization(currentQueryResult);
+                    }, 100);
+                }
             }
         }
 
-        // Show visualization recommendation
+        // Show visualization recommendation (from external API)
         function showVisualizationRecommendation(recommendation) {
-            const recommendationEl = document.getElementById('chart-recommendation');
-            const textEl = document.getElementById('recommendation-text');
+            // This would handle external API visualization recommendations
+            // For now, our internal AI recommendation system handles this
+            console.log('External visualization recommendation:', recommendation);
             
-            // Handle undefined values with fallbacks
-            const title = recommendation.title || recommendation.chart_type || 'Data Visualization';
-            const description = recommendation.description || 'AI-generated visualization for your query results';
-            const rationale = recommendation.rationale || 'Automatically selected based on data characteristics';
-            
-            textEl.innerHTML = `
-                <strong>${title}</strong><br>
-                <small class="text-muted">${description}</small><br>
-                <em>Rationale:</em> ${rationale}
-            `;
-            
-            recommendationEl.style.display = 'block';
-            
-            // Update chart type selector
-            const chartTypeSelector = document.getElementById('chart-type-selector');
-            if (chartTypeSelector && recommendation.chart_type) {
-                chartTypeSelector.value = recommendation.chart_type;
-            }
-            
-            // Show chart - handle both 'config' and 'chart_config' properties
-            const chartConfig = recommendation.config || recommendation.chart_config;
-            if (chartConfig) {
-                // Store current visualization for later use
-                currentVisualization = recommendation;
-                
-                renderVisualization(chartConfig);
-                document.getElementById('chart-controls').style.display = 'flex';
-                
-                // Auto switch to chart tab if not already active
-                const chartTab = document.getElementById('chart-tab');
-                if (!chartTab.classList.contains('active')) {
-                    switchResultsTab('chart');
-                } else {
-                    // If already on chart tab, just scroll to chart area
-                    setTimeout(() => {
-                        const chartResultsContent = document.getElementById('chart-results-content');
-                        if (chartResultsContent) {
-                            chartResultsContent.scrollIntoView({ 
-                                behavior: 'smooth', 
-                                block: 'start',
-                                inline: 'nearest'
-                            });
-                            
-                            // Add highlight effect
-                            chartResultsContent.style.transition = 'background-color 0.3s ease-in-out';
-                            chartResultsContent.style.backgroundColor = 'rgba(40, 167, 69, 0.05)';
-                            
-                            // Show chart notification
-                            showResultsNotification(`📈 ${title} generated successfully`, 'success');
-                            
-                            // Reset highlight
-                            setTimeout(() => {
-                                chartResultsContent.style.backgroundColor = '';
-                            }, 2000);
-                        }
-                    }, 200);
-                }
-            } else {
-                console.error('No chart configuration found in recommendation:', recommendation);
-                showResultsNotification('⚠️ Chart configuration error - unable to display visualization', 'warning');
-                
-                // Show fallback message in chart container
-                const chartContainer = document.getElementById('chart-container');
-                if (chartContainer) {
-                    chartContainer.innerHTML = `
-                        <div class="alert alert-warning text-center">
-                            <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                            <h6>Chart Configuration Error</h6>
-                            <p>Unable to generate visualization for this data.</p>
-                            <small class="text-muted">Try selecting a different chart type or refreshing the visualization.</small>
-                        </div>
+            // Could integrate with external AI services here if needed
+            const recommendationDiv = document.getElementById('chart-recommendation');
+            if (recommendationDiv && recommendation) {
+                const recommendationText = document.getElementById('recommendation-text');
+                if (recommendationText) {
+                    recommendationText.innerHTML = `
+                        <strong>External AI Recommendation:</strong> ${recommendation}
+                        <br><small class="text-muted">Our built-in analysis will also provide chart recommendations.</small>
                     `;
+                    recommendationDiv.style.display = 'block';
                 }
             }
         }
 
-        // Render visualization using Plotly
-        function renderVisualization(config) {
-            try {
-                const chartContainer = document.getElementById('chart-container');
-                if (!chartContainer) {
-                    console.error('Chart container not found');
-                    return;
-                }
-                
-                if (!config || !config.data) {
-                    console.error('Invalid chart configuration:', config);
-                    chartContainer.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Invalid chart configuration</div>';
-                    return;
-                }
-                
-                // Clear any existing content
-                chartContainer.innerHTML = '';
-                
-                // Set container dimensions
-                chartContainer.style.minHeight = '450px';
-                chartContainer.style.width = '100%';
-                chartContainer.style.position = 'relative';
-                
-                // Improve layout configuration
-                const improvedLayout = {
-                    ...config.layout,
-                    autosize: true,
-                    margin: {
-                        l: 60,
-                        r: 40,
-                        t: 60,
-                        b: 60,
-                        pad: 10
-                    },
-                    font: {
-                        family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
-                        size: 12
-                    },
-                    paper_bgcolor: 'white',
-                    plot_bgcolor: 'rgba(0,0,0,0)',
-                    showlegend: config.layout.showlegend !== false,
-                    hovermode: 'closest'
-                };
-                
-                // Improve config
-                const improvedConfig = {
-                    responsive: true,
-                    displayModeBar: true,
-                    displaylogo: false,
-                    modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
-                    toImageButtonOptions: {
-                        format: 'png',
-                        filename: 'chart',
-                        height: 500,
-                        width: 800,
-                        scale: 1
-                    },
-                    ...config.config
-                };
-                
-                // Create the Plotly chart
-                Plotly.newPlot(chartContainer, config.data, improvedLayout, improvedConfig).then(() => {
-                    console.log('Chart rendered successfully');
-                    
-                    // Ensure chart is properly sized after render
-                    setTimeout(() => {
-                        try {
-                            Plotly.Plots.resize(chartContainer);
-                        } catch (resizeError) {
-                            console.warn('Chart resize warning:', resizeError);
-                        }
-                    }, 200);
-                    
-                    // Add window resize listener for responsiveness
-                    const resizeHandler = () => {
-                        try {
-                            Plotly.Plots.resize(chartContainer);
-                        } catch (resizeError) {
-                            console.warn('Chart resize on window resize warning:', resizeError);
-                        }
-                    };
-                    
-                    // Remove existing listener if any
-                    window.removeEventListener('resize', resizeHandler);
-                    window.addEventListener('resize', resizeHandler);
-                    
-                }).catch((error) => {
-                    console.error('Error rendering Plotly chart:', error);
-                    chartContainer.innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Error rendering chart: ${error.message}
-                            <br><small class="text-muted">Please try switching chart types or refreshing the visualization.</small>
-                        </div>
-                    `;
-                });
-                
-            } catch (error) {
-                console.error('Error in renderVisualization:', error);
-                const chartContainer = document.getElementById('chart-container');
-                if (chartContainer) {
-                    chartContainer.innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Error rendering visualization: ${error.message}
-                            <br><small class="text-muted">Please try refreshing or contact support if the issue persists.</small>
-                        </div>
-                    `;
-                }
-            }
+        // Refresh catalog
+        function refreshCatalog() {
+            loadCatalogData();
         }
 
-        // Update visualization based on chart type selector
-        async function updateVisualization() {
-            if (!currentQueryResult || !currentQueryResult.data) return;
-
-            const chartType = document.getElementById('chart-type-selector').value;
+        // Natural Language Query Functions
+        async function executeNaturalLanguageQuery() {
+            const nlQueryInput = document.getElementById('nl-query-input');
+            const query = nlQueryInput.value.trim();
             
-            try {
-                // Prepare column information
-                const columns = currentQueryResult.columns.map(col => ({name: col, type: 'string'}));
-                
-                const response = await fetch('/api/v1/analysis/visualize-recommend', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        data: currentQueryResult.data.map(row => {
-                            const obj = {};
-                            currentQueryResult.columns.forEach((col, index) => {
-                                obj[col] = row[index];
-                            });
-                            return obj;
-                        }),
-                        columns: columns,
-                        query_description: document.getElementById('nl-query-input').value || 'Manual chart type selection'
-                    })
-                });
-
-                const recommendation = await response.json();
-                
-                // Override chart type with user selection
-                recommendation.chart_type = chartType;
-                recommendation.config = await createPlotlyConfig(chartType, currentQueryResult);
-                
-                renderVisualization(recommendation.config);
-
-            } catch (error) {
-                console.error('Error updating visualization:', error);
-            }
-        }
-
-        // Create Plotly configuration for different chart types
-        async function createPlotlyConfig(chartType, queryResult) {
-            const columns = queryResult.columns;
-            const data = queryResult.data.map(row => {
-                const obj = {};
-                columns.forEach((col, index) => {
-                    obj[col] = row[index];
-                });
-                return obj;
-            });
-
-            let config = {
-                data: [],
-                layout: {
-                    title: {
-                        text: 'Query Results Visualization',
-                        font: { size: 16 },
-                        pad: { t: 20 }
-                    },
-                    showlegend: true,
-                    autosize: true,
-                    margin: {
-                        l: 70,
-                        r: 50,
-                        t: 80,
-                        b: 70,
-                        pad: 10
-                    },
-                    font: {
-                        family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
-                        size: 12
-                    },
-                    paper_bgcolor: 'white',
-                    plot_bgcolor: 'rgba(248, 249, 250, 0.5)',
-                    hovermode: 'closest'
-                },
-                config: {
-                    responsive: true,
-                    displayModeBar: true,
-                    displaylogo: false,
-                    modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
-                }
-            };
-
-            if (chartType === 'table') {
-                config.data = [{
-                    type: 'table',
-                    header: {
-                        values: columns,
-                        fill: {color: '#C2D4FF'},
-                        align: 'left',
-                        font: {size: 12, color: 'black'}
-                    },
-                    cells: {
-                        values: columns.map(col => data.map(row => row[col])),
-                        fill: {color: '#F5F8FF'},
-                        align: 'left',
-                        font: {size: 11}
-                    }
-                }];
-                config.layout.title.text = 'Data Table';
-            } else if (chartType === 'bar' && columns.length >= 2) {
-                config.data = [{
-                    x: data.map(row => row[columns[0]]),
-                    y: data.map(row => row[columns[1]]),
-                    type: 'bar',
-                    name: columns[1],
-                    marker: {
-                        color: 'rgba(55, 128, 191, 0.7)',
-                        line: {
-                            color: 'rgba(55, 128, 191, 1.0)',
-                            width: 1
-                        }
-                    }
-                }];
-                config.layout.xaxis = {title: columns[0], tickangle: -45};
-                config.layout.yaxis = {title: columns[1]};
-                config.layout.title.text = `${columns[1]} by ${columns[0]}`;
-            } else if (chartType === 'line' && columns.length >= 2) {
-                config.data = [{
-                    x: data.map(row => row[columns[0]]),
-                    y: data.map(row => row[columns[1]]),
-                    type: 'scatter',
-                    mode: 'lines+markers',
-                    name: columns[1],
-                    line: {
-                        color: 'rgb(55, 128, 191)',
-                        width: 2
-                    },
-                    marker: {
-                        color: 'rgba(55, 128, 191, 0.8)',
-                        size: 6
-                    }
-                }];
-                config.layout.xaxis = {title: columns[0]};
-                config.layout.yaxis = {title: columns[1]};
-                config.layout.title.text = `${columns[1]} over ${columns[0]}`;
-            } else if (chartType === 'pie' && columns.length >= 2) {
-                config.data = [{
-                    labels: data.map(row => row[columns[0]]),
-                    values: data.map(row => row[columns[1]]),
-                    type: 'pie',
-                    textinfo: 'label+percent',
-                    textposition: 'outside',
-                    automargin: true
-                }];
-                config.layout.title.text = `Distribution of ${columns[1]}`;
-                config.layout.margin = { l: 50, r: 50, t: 80, b: 50, pad: 10 };
-            } else if (chartType === 'scatter' && columns.length >= 2) {
-                config.data = [{
-                    x: data.map(row => row[columns[0]]),
-                    y: data.map(row => row[columns[1]]),
-                    type: 'scatter',
-                    mode: 'markers',
-                    name: columns[1],
-                    marker: {
-                        color: 'rgba(55, 128, 191, 0.7)',
-                        size: 8,
-                        line: {
-                            color: 'rgba(55, 128, 191, 1.0)',
-                            width: 1
-                        }
-                    }
-                }];
-                config.layout.xaxis = {title: columns[0]};
-                config.layout.yaxis = {title: columns[1]};
-                config.layout.title.text = `${columns[1]} vs ${columns[0]}`;
-            }
-
-            return config;
-        }
-
-        // Refresh visualization
-        function refreshVisualization() {
-            if (currentVisualization && currentVisualization.config) {
-                try {
-                    showResultsNotification('🔄 Refreshing chart...', 'info');
-                    renderVisualization(currentVisualization.config);
-                    
-                    // Scroll to chart area after refresh
-                    setTimeout(() => {
-                        const chartResultsContent = document.getElementById('chart-results-content');
-                        if (chartResultsContent && chartResultsContent.style.display !== 'none') {
-                            chartResultsContent.scrollIntoView({ 
-                                behavior: 'smooth', 
-                                block: 'start',
-                                inline: 'nearest'
-                            });
-                        }
-                    }, 500);
-                    
-                } catch (error) {
-                    console.error('Error refreshing visualization:', error);
-                    showResultsNotification('❌ Error refreshing chart', 'error');
-                }
-            } else if (currentQueryResult && currentQueryResult.data && currentQueryResult.data.length > 0) {
-                // If no current visualization but we have query results, generate a new one
-                showResultsNotification('🔄 Generating new visualization...', 'info');
-                getVisualizationRecommendation(currentQueryResult);
-            } else {
-                showResultsNotification('⚠️ No data available for visualization', 'warning');
-            }
-        }
-
-        // Get visualization recommendation
-        async function getVisualizationRecommendation(queryResult) {
-            try {
-                const data = queryResult.data.map(row => {
-                    const obj = {};
-                    queryResult.columns.forEach((col, index) => {
-                        obj[col] = row[index];
-                    });
-                    return obj;
-                });
-
-                const selectedModel = document.getElementById('model-selector').value;
-
-                const response = await fetch('/api/v1/analysis/visualize-recommend', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        data: data,
-                        data_summary: {row_count: data.length},
-                        user_intent: document.getElementById('nl-query-input').value || 'SQL Query Result',
-                        model_key: selectedModel || null
-                    })
-                });
-
-                const recommendation = await response.json();
-                currentVisualization = recommendation;
-                showVisualizationRecommendation(recommendation);
-
-            } catch (error) {
-                console.error('Error getting visualization recommendation:', error);
-            }
-        }
-
-        // ========== LLM Model Management Functions ==========
-        
-        let availableModels = [];
-        let currentModel = null;
-
-        // Load available LLM models
-        async function loadLLMModels() {
-            try {
-                const response = await fetch('/api/v1/analysis/llm-models');
-                const data = await response.json();
-                
-                availableModels = data.available_models;
-                currentModel = data.current_model;
-                
-                populateModelSelector();
-                updateModelStatus();
-                
-            } catch (error) {
-                console.error('Error loading LLM models:', error);
-                updateModelStatus('error', 'Failed to load models');
-            }
-        }
-
-        // Populate model selector dropdown
-        function populateModelSelector() {
-            const selector = document.getElementById('model-selector');
-            const providerFilter = document.getElementById('provider-filter').value;
-            
-            // Clear existing options
-            selector.innerHTML = '';
-            
-            // Filter models by provider if selected
-            let filteredModels = availableModels;
-            if (providerFilter !== 'all') {
-                filteredModels = availableModels.filter(model => model.provider === providerFilter);
-            }
-            
-            if (filteredModels.length === 0) {
-                selector.innerHTML = '<option value="">No models available</option>';
+            if (!query) {
+                showQueryStatus('Please enter a natural language query', 'warning');
                 return;
             }
             
-            // Add models to dropdown
-            filteredModels.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.key;
-                option.textContent = model.display_name;
+            try {
+                showQueryStatus('Processing natural language query with AI and auto-correction...', 'info');
                 
-                // Mark current model as selected
-                if (model.key === currentModel) {
-                    option.selected = true;
+                // Get current model selection
+                const modelSelect = document.getElementById('model-selector');
+                const selectedModel = modelSelect.value;
+                
+                if (!selectedModel) {
+                    throw new Error('Please select an AI model first');
                 }
                 
-                selector.appendChild(option);
-            });
-            
-            // Update model info display
-            if (selector.value) {
-                updateModelInfo(selector.value);
+                // Send NL query to AI service with auto-correction
+                const response = await fetch('/api/v1/analysis/natural-language-query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        model_key: selectedModel,  // Changed from 'model' to 'model_key'
+                        catalog: currentTableSelection?.catalog || (currentCatalogData?.catalogs?.[0]?.name || 'system'),
+                        schema: currentTableSelection?.schema || 'runtime',
+                        conversation_history: []
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to process natural language query');
+                }
+                
+                const result = await response.json();
+                
+                // API always returns a result, check if we have sql_query
+                if (result.sql_query) {
+                    // Set the generated SQL in the query editor
+                    queryEditor.setValue(result.sql_query);
+                    
+                    // Enhanced status message with auto-correction info
+                    let statusMessage = `AI Generated SQL: ${result.explanation}`;
+                    
+                    // Check if auto-correction features were mentioned in explanation
+                    if (result.explanation.includes('🔧 Auto-correction: successfully fixed')) {
+                        statusMessage = `✨ AI Auto-Corrected SQL with LLM: ${result.explanation}`;
+                        showQueryStatus(statusMessage, 'success');
+                        
+                        // Show additional detailed info about the LLM correction
+                        setTimeout(() => {
+                            if (result.explanation.includes('EXPRESSION_NOT_AGGREGATE')) {
+                                showQueryStatus('🤖 LLM Intelligence: Automatically fixed GROUP BY clause for proper SQL aggregation', 'success');
+                            } else if (result.explanation.includes('TABLE_NOT_FOUND')) {
+                                showQueryStatus('🤖 LLM Intelligence: Automatically corrected table references with proper catalog.schema.table format', 'success');
+                            } else if (result.explanation.includes('COLUMN_NOT_FOUND')) {
+                                showQueryStatus('🤖 LLM Intelligence: Automatically corrected column names based on schema analysis', 'success');
+                            } else {
+                                showQueryStatus('🤖 LLM Intelligence: SQL has been automatically validated and corrected!', 'success');
+                            }
+                        }, 2000);
+                        
+                        // Show fix details if available
+                        if (result.explanation.includes('📝 Fix applied:')) {
+                            setTimeout(() => {
+                                const fixMatch = result.explanation.match(/📝 Fix applied: ([^\n]+)/);
+                                if (fixMatch) {
+                                    showQueryStatus(`🔧 LLM Fix Details: ${fixMatch[1]}`, 'info');
+                                }
+                            }, 4000);
+                        }
+                    } else if (result.explanation.includes('✅ SQL validation successful')) {
+                        statusMessage = `✅ AI Generated & LLM Validated SQL: ${result.explanation}`;
+                        showQueryStatus(statusMessage, 'success');
+                        
+                        setTimeout(() => {
+                            showQueryStatus('✅ SQL passed LLM validation - safe to execute without correction', 'success');
+                        }, 2000);
+                    } else if (result.explanation.includes('⚠️ Auto-correction service unavailable')) {
+                        statusMessage = `⚠️ ${result.explanation}`;
+                        showQueryStatus(statusMessage, 'warning');
+                        
+                        setTimeout(() => {
+                            showQueryStatus('⚠️ LLM auto-correction temporarily unavailable - please review SQL manually', 'warning');
+                        }, 2000);
+                    } else {
+                        showQueryStatus(statusMessage, 'success');
+                    }
+                    
+                    // Scroll to query editor to show the generated SQL
+                    queryEditor.focus();
+                    
+                    // Enhanced auto-execution logic with LLM validation awareness
+                    if (result.confidence > 0.9 && result.explanation.includes('✅ SQL validation successful')) {
+                        showQueryStatus('🚀 High confidence LLM-validated SQL - auto-executing...', 'info');
+                        setTimeout(() => {
+                            executeSQL();
+                        }, 1500);
+                    } else if (result.confidence > 0.8 && result.explanation.includes('🔧 Auto-correction: successfully fixed')) {
+                        showQueryStatus('🔧 LLM auto-correction completed with high confidence - auto-executing...', 'info');
+                        setTimeout(() => {
+                            executeSQL();
+                        }, 2000);
+                    } else if (result.confidence > 0.7 && !result.explanation.includes('⚠️')) {
+                        // For medium confidence, ask user
+                        setTimeout(() => {
+                            showQueryStatus('📋 LLM-generated SQL ready. Click "Execute SQL" to run the query.', 'info');
+                        }, 2000);
+                    } else {
+                        setTimeout(() => {
+                            showQueryStatus('💡 SQL generated - recommend review before execution.', 'info');
+                        }, 2000);
+                    }
+                } else {
+                    throw new Error('No SQL query generated');
+                }
+
+            } catch (error) {
+                console.error('Error processing natural language query:', error);
+                
+                let errorMessage = 'Failed to process natural language query: ' + error.message;
+                
+                // Provide helpful suggestions based on the error
+                if (error.message.includes('model')) {
+                    errorMessage += '. Please select an AI model from the configuration panel above.';
+                } else if (!currentTableSelection) {
+                    errorMessage += '. For better results, try selecting a table from the catalog first.';
+                } else if (error.message.includes('Failed to process')) {
+                    // Try to show a fallback query
+                    const fallbackQuery = "SELECT 'Demo: Natural language processing with auto-correction is working!' as message, CURRENT_TIMESTAMP as generated_at";
+                    queryEditor.setValue(fallbackQuery);
+                    errorMessage = 'Using fallback demo query. Auto-correction features may be unavailable. ' + errorMessage;
+                }
+                
+                showQueryStatus(errorMessage, 'error');
             }
         }
 
-        // Filter models by provider
+        function handleNLQueryKeyPress(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                executeNaturalLanguageQuery();
+            }
+        }
+
+        // Speech Recognition Functions
+        let speechRecognition = null;
+        let isListening = false;
+
+        function initializeSpeechRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                console.warn('Speech recognition not supported in this browser');
+                const voiceButton = document.getElementById('voice-button');
+                if (voiceButton) {
+                    voiceButton.style.display = 'none';
+                }
+                return;
+            }
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            speechRecognition = new SpeechRecognition();
+            
+            speechRecognition.continuous = false;
+            speechRecognition.interimResults = false;
+            speechRecognition.lang = 'en-US';
+            
+            speechRecognition.onstart = function() {
+                isListening = true;
+                const voiceButton = document.getElementById('voice-button');
+                const statusDiv = document.getElementById('nl-query-status');
+                
+                if (voiceButton) {
+                    voiceButton.innerHTML = '<i class="fas fa-stop text-danger"></i>';
+                    voiceButton.title = 'Click to stop listening';
+                }
+                
+                if (statusDiv) {
+                    statusDiv.innerHTML = '<i class="fas fa-microphone text-success me-1"></i>Listening... Speak your query now.';
+                    statusDiv.style.display = 'block';
+                }
+            };
+            
+            speechRecognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                const nlQueryInput = document.getElementById('nl-query-input');
+                
+                if (nlQueryInput) {
+                    nlQueryInput.value = transcript;
+                }
+                
+                const statusDiv = document.getElementById('nl-query-status');
+                if (statusDiv) {
+                    statusDiv.innerHTML = `<i class="fas fa-check text-success me-1"></i>Captured: "${transcript}"`;
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 3000);
+                }
+            };
+            
+            speechRecognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                const statusDiv = document.getElementById('nl-query-status');
+                if (statusDiv) {
+                    statusDiv.innerHTML = `<i class="fas fa-exclamation-triangle text-warning me-1"></i>Speech recognition error: ${event.error}`;
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 5000);
+                }
+                resetVoiceButton();
+            };
+            
+            speechRecognition.onend = function() {
+                resetVoiceButton();
+            };
+        }
+
+        function toggleVoiceInput() {
+            if (!speechRecognition) {
+                alert('Speech recognition is not available in your browser');
+                return;
+            }
+            
+            if (isListening) {
+                speechRecognition.stop();
+            } else {
+                try {
+                    speechRecognition.start();
+                } catch (error) {
+                    console.error('Error starting speech recognition:', error);
+                    alert('Failed to start speech recognition. Please ensure microphone permissions are granted.');
+                }
+            }
+        }
+
+        function resetVoiceButton() {
+            isListening = false;
+            const voiceButton = document.getElementById('voice-button');
+            
+            if (voiceButton) {
+                voiceButton.innerHTML = '<i class="fas fa-microphone"></i>';
+                voiceButton.title = 'Click and speak';
+            }
+        }
+
+        // LLM Model Management Functions
+        let availableModels = [];
+        let currentModel = null;
+
+        async function loadLLMModels() {
+            try {
+                showModelStatus('Loading AI models...', 'loading');
+                
+                const response = await fetch('/api/v1/llm/models');
+                if (!response.ok) {
+                    throw new Error('Failed to load models');
+                }
+                
+                const data = await response.json();
+                availableModels = data.models || [];
+                
+                populateModelSelector();
+                showModelStatus(`Loaded ${availableModels.length} AI models`, 'success');
+                
+            } catch (error) {
+                console.error('Error loading LLM models:', error);
+                showModelStatus('Failed to load AI models: ' + error.message, 'error');
+                
+                // Fallback to demo models
+                availableModels = [
+                    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai', status: 'available' },
+                    { id: 'gpt-4', name: 'GPT-4', provider: 'openai', status: 'available' },
+                    { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'anthropic', status: 'available' }
+                ];
+                populateModelSelector();
+                showModelStatus('Using demo models (API unavailable)', 'warning');
+            }
+        }
+
+        function populateModelSelector() {
+            const modelSelector = document.getElementById('model-selector');
+            const providerFilter = document.getElementById('provider-filter');
+            
+            if (!modelSelector) return;
+            
+            // Clear existing options
+            modelSelector.innerHTML = '<option value="">Select AI Model...</option>';
+            
+            // Filter models based on provider
+            const selectedProvider = providerFilter?.value || 'all';
+            const filteredModels = selectedProvider === 'all' ? 
+                availableModels : 
+                availableModels.filter(model => model.provider === selectedProvider);
+            
+            // Add model options
+            filteredModels.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.id;
+                option.textContent = `${model.name} (${model.provider})`;
+                
+                if (model.status !== 'available') {
+                    option.disabled = true;
+                    option.textContent += ' - Unavailable';
+                }
+                
+                modelSelector.appendChild(option);
+            });
+            
+            // Auto-select first available model if none selected
+            if (!currentModel && filteredModels.length > 0) {
+                const firstAvailable = filteredModels.find(m => m.status === 'available');
+                if (firstAvailable) {
+                    modelSelector.value = firstAvailable.id;
+                    changeModel();
+                }
+            }
+        }
+
+        function changeModel() {
+            const modelSelector = document.getElementById('model-selector');
+            const selectedModelId = modelSelector.value;
+            
+            currentModel = availableModels.find(model => model.id === selectedModelId);
+            
+            if (currentModel) {
+                updateModelInfo(currentModel);
+                showModelStatus(`Selected: ${currentModel.name}`, 'success');
+            } else {
+                showModelStatus('No model selected', 'warning');
+                document.getElementById('model-info').innerHTML = '';
+            }
+        }
+
         function filterModelsByProvider() {
             populateModelSelector();
         }
 
-        // Change active model
-        async function changeModel() {
-            const selectedModelKey = document.getElementById('model-selector').value;
-            
-            if (!selectedModelKey) return;
-            
-            try {
-                updateModelStatus('loading', 'Changing model...');
-                
-                const response = await fetch('/api/v1/analysis/set-default-model', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model_key: selectedModelKey
-                    })
-                });
-                
-                if (response.ok) {
-                    currentModel = selectedModelKey;
-                    updateModelInfo(selectedModelKey);
-                    updateModelStatus('available', 'Model changed successfully');
-                } else {
-                    const error = await response.json();
-                    updateModelStatus('error', `Failed to change model: ${error.detail}`);
-                }
-                
-            } catch (error) {
-                console.error('Error changing model:', error);
-                updateModelStatus('error', 'Failed to change model');
-            }
+        async function refreshModels() {
+            await loadLLMModels();
         }
 
-        // Update model information display
-        function updateModelInfo(modelKey) {
-            const model = availableModels.find(m => m.key === modelKey);
-            const infoEl = document.getElementById('model-info');
+        function updateModelInfo(model) {
+            const modelInfo = document.getElementById('model-info');
+            if (!modelInfo) return;
             
-            if (!model) {
-                infoEl.innerHTML = '';
-                return;
-            }
-            
-            infoEl.innerHTML = `
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                    <span class="provider-badge provider-${model.provider}">${model.provider.toUpperCase()}</span>
-                    <span class="small">Model: ${model.model_name}</span>
-                    ${model.max_tokens ? `<span class="small">Max Tokens: ${model.max_tokens}</span>` : ''}
-                    ${model.supports_streaming ? '<span class="badge bg-success">Streaming</span>' : ''}
-                    ${model.supports_json_mode ? '<span class="badge bg-info">JSON Mode</span>' : ''}
+            modelInfo.innerHTML = `
+                <div class="model-details mt-2">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="small text-muted">Provider</div>
+                            <div class="fw-bold">${model.provider}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="small text-muted">Status</div>
+                            <div class="fw-bold text-${model.status === 'available' ? 'success' : 'warning'}">${model.status}</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="small text-muted">Type</div>
+                            <div class="fw-bold">LLM</div>
+                        </div>
+                    </div>
                 </div>
             `;
         }
 
-        // Update model status indicator
-        function updateModelStatus(status = 'available', message = 'Model ready') {
-            const indicator = document.getElementById('model-status-indicator');
-            const text = document.getElementById('model-status-text');
+        function showModelStatus(message, type) {
+            const statusIndicator = document.getElementById('model-status-indicator');
+            const statusText = document.getElementById('model-status-text');
             
-            // Remove existing status classes
-            indicator.className = 'status-indicator';
-            
-            // Add appropriate status class
-            switch (status) {
-                case 'available':
-                    indicator.classList.add('status-available');
-                    break;
-                case 'loading':
-                    indicator.classList.add('status-unavailable');
-                    break;
-                case 'error':
-                    indicator.classList.add('status-unavailable');
-                    break;
-                default:
-                    indicator.classList.add('status-available');
+            if (statusIndicator && statusText) {
+                statusText.textContent = message;
+                
+                // Update indicator color
+                statusIndicator.className = 'status-indicator';
+                if (type === 'success') {
+                    statusIndicator.classList.add('status-success');
+                } else if (type === 'error') {
+                    statusIndicator.classList.add('status-error');
+                } else if (type === 'warning') {
+                    statusIndicator.classList.add('status-warning');
+                } else {
+                    statusIndicator.classList.add('status-loading');
+                }
+            }
+        }
+
+        // === VISUALIZATION FUNCTIONS ===
+        
+        // Data analysis for visualization
+        function analyzeDataForVisualization(data, columns) {
+            if (!data || !columns || data.length === 0) {
+                return null;
             }
             
-            text.textContent = message;
-        }
-
-        // Refresh models
-        async function refreshModels() {
-            updateModelStatus('loading', 'Refreshing models...');
-            await loadLLMModels();
-        }
-
-        // Execute SQL query directly
-        async function executeSQL() {
-            const sqlQuery = queryEditor.getValue().trim();
+            const analysis = {
+                columnTypes: {},
+                numericColumns: [],
+                textColumns: [],
+                dateColumns: [],
+                sampleData: data.slice(0, Math.min(100, data.length)), // Sample for analysis
+                rowCount: data.length,
+                columnCount: columns.length
+            };
             
-            if (!sqlQuery) {
-                alert('Please enter a SQL query');
+            // Analyze column types based on data content
+            columns.forEach((column, index) => {
+                const columnData = data.map(row => row[index]).filter(val => val !== null && val !== undefined);
+                
+                if (columnData.length === 0) {
+                    analysis.columnTypes[column] = 'empty';
+                    return;
+                }
+                
+                // Check if numeric
+                const numericValues = columnData.filter(val => !isNaN(parseFloat(val)) && isFinite(val));
+                if (numericValues.length > columnData.length * 0.8) {
+                    analysis.columnTypes[column] = 'numeric';
+                    analysis.numericColumns.push({
+                        name: column,
+                        index: index,
+                        min: Math.min(...numericValues.map(v => parseFloat(v))),
+                        max: Math.max(...numericValues.map(v => parseFloat(v))),
+                        avg: numericValues.reduce((sum, v) => sum + parseFloat(v), 0) / numericValues.length
+                    });
+                    return;
+                }
+                
+                // Check if date
+                const dateValues = columnData.filter(val => {
+                    const date = new Date(val);
+                    return !isNaN(date.getTime());
+                });
+                if (dateValues.length > columnData.length * 0.7) {
+                    analysis.columnTypes[column] = 'date';
+                    analysis.dateColumns.push({
+                        name: column,
+                        index: index,
+                        earliest: new Date(Math.min(...dateValues.map(v => new Date(v).getTime()))),
+                        latest: new Date(Math.max(...dateValues.map(v => new Date(v).getTime())))
+                    });
+                    return;
+                }
+                
+                // Default to text
+                analysis.columnTypes[column] = 'text';
+                analysis.textColumns.push({
+                    name: column,
+                    index: index,
+                    uniqueValues: [...new Set(columnData)].length,
+                    mostCommon: getMostCommonValue(columnData)
+                });
+            });
+            
+            return analysis;
+        }
+        
+        // Get most common value in array
+        function getMostCommonValue(arr) {
+            const freq = {};
+            let maxCount = 0;
+            let mostCommon = null;
+            
+            arr.forEach(val => {
+                freq[val] = (freq[val] || 0) + 1;
+                if (freq[val] > maxCount) {
+                    maxCount = freq[val];
+                    mostCommon = val;
+                }
+            });
+            
+            return { value: mostCommon, count: maxCount };
+        }
+        
+        // Recommend chart type based on data analysis
+        function recommendChartType(analysis) {
+            if (!analysis) return 'table';
+            
+            const { numericColumns, textColumns, dateColumns, rowCount } = analysis;
+            
+            // Single numeric column: Histogram
+            if (numericColumns.length === 1 && textColumns.length === 0) {
+                return 'histogram';
+            }
+            
+            // One text column + one numeric column: Bar chart
+            if (textColumns.length === 1 && numericColumns.length === 1) {
+                // If text column has reasonable number of unique values, use bar chart
+                if (textColumns[0].uniqueValues <= 20) {
+                    return 'bar';
+                }
+                return 'scatter';
+            }
+            
+            // Two numeric columns: Scatter plot
+            if (numericColumns.length >= 2 && textColumns.length === 0) {
+                return 'scatter';
+            }
+            
+            // Date column + numeric column: Line chart
+            if (dateColumns.length >= 1 && numericColumns.length >= 1) {
+                return 'line';
+            }
+            
+            // Text column with few unique values + numeric: Pie chart
+            if (textColumns.length === 1 && numericColumns.length === 1 && 
+                textColumns[0].uniqueValues <= 10 && rowCount <= 20) {
+                return 'pie';
+            }
+            
+            // Default to bar chart for simple categorical data
+            if (textColumns.length >= 1 && numericColumns.length >= 1) {
+                return 'bar';
+            }
+            
+            // Fallback to table
+            return 'table';
+        }
+        
+        // Create bar chart using Plotly
+        function createBarChart(data, columns, analysis) {
+            const textCol = analysis.textColumns[0];
+            const numericCol = analysis.numericColumns[0];
+            
+            if (!textCol || !numericCol) return null;
+            
+            // Group data by text column and sum numeric values
+            const groupedData = {};
+            data.forEach(row => {
+                const key = row[textCol.index];
+                const value = parseFloat(row[numericCol.index]) || 0;
+                groupedData[key] = (groupedData[key] || 0) + value;
+            });
+            
+            const sortedEntries = Object.entries(groupedData)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 20); // Limit to top 20
+            
+            return {
+                data: [{
+                    x: sortedEntries.map(([key,]) => key),
+                    y: sortedEntries.map(([, value]) => value),
+                    type: 'bar',
+                    marker: {
+                        color: 'rgba(58, 123, 213, 0.8)',
+                        line: { color: 'rgba(58, 123, 213, 1.0)', width: 1 }
+                    },
+                    name: numericCol.name
+                }],
+                layout: {
+                    title: `${numericCol.name} by ${textCol.name}`,
+                    xaxis: { title: textCol.name },
+                    yaxis: { title: numericCol.name },
+                    margin: { l: 50, r: 50, t: 50, b: 50 }
+                }
+            };
+        }
+        
+        // Create line chart using Plotly
+        function createLineChart(data, columns, analysis) {
+            const dateCol = analysis.dateColumns[0];
+            const numericCol = analysis.numericColumns[0];
+            
+            if (!dateCol || !numericCol) {
+                // Fallback: use first two numeric columns
+                if (analysis.numericColumns.length >= 2) {
+                    const xCol = analysis.numericColumns[0];
+                    const yCol = analysis.numericColumns[1];
+                    
+                    return {
+                        data: [{
+                            x: data.map(row => parseFloat(row[xCol.index])),
+                            y: data.map(row => parseFloat(row[yCol.index])),
+                            type: 'scatter',
+                            mode: 'lines+markers',
+                            marker: { color: 'rgba(219, 64, 82, 0.8)' },
+                            name: `${yCol.name} vs ${xCol.name}`
+                        }],
+                        layout: {
+                            title: `${yCol.name} vs ${xCol.name}`,
+                            xaxis: { title: xCol.name },
+                            yaxis: { title: yCol.name },
+                            margin: { l: 50, r: 50, t: 50, b: 50 }
+                        }
+                    };
+                }
+                return null;
+            }
+            
+            // Sort data by date
+            const sortedData = data
+                .map(row => ({
+                    date: new Date(row[dateCol.index]),
+                    value: parseFloat(row[numericCol.index]) || 0
+                }))
+                .filter(item => !isNaN(item.date.getTime()))
+                .sort((a, b) => a.date - b.date);
+            
+            return {
+                data: [{
+                    x: sortedData.map(item => item.date),
+                    y: sortedData.map(item => item.value),
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    marker: { color: 'rgba(219, 64, 82, 0.8)' },
+                    name: numericCol.name
+                }],
+                layout: {
+                    title: `${numericCol.name} over Time`,
+                    xaxis: { title: dateCol.name, type: 'date' },
+                    yaxis: { title: numericCol.name },
+                    margin: { l: 50, r: 50, t: 50, b: 50 }
+                }
+            };
+        }
+        
+        // Create pie chart using Plotly
+        function createPieChart(data, columns, analysis) {
+            const textCol = analysis.textColumns[0];
+            const numericCol = analysis.numericColumns[0];
+            
+            if (!textCol || !numericCol) return null;
+            
+            // Group data and calculate percentages
+            const groupedData = {};
+            let total = 0;
+            
+            data.forEach(row => {
+                const key = row[textCol.index];
+                const value = parseFloat(row[numericCol.index]) || 0;
+                groupedData[key] = (groupedData[key] || 0) + value;
+                total += value;
+            });
+            
+            const sortedEntries = Object.entries(groupedData)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 10); // Limit to top 10
+            
+            return {
+                data: [{
+                    labels: sortedEntries.map(([key,]) => key),
+                    values: sortedEntries.map(([, value]) => value),
+                    type: 'pie',
+                    hole: 0.3, // Donut chart
+                    textinfo: 'label+percent',
+                    marker: {
+                        colors: ['#3A7BD5', '#DB4052', '#00D2FF', '#FF9500', '#00C851', 
+                                '#FF6B9D', '#C34632', '#00BFA5', '#FF5722', '#795548']
+                    }
+                }],
+                layout: {
+                    title: `Distribution of ${numericCol.name} by ${textCol.name}`,
+                    margin: { l: 50, r: 50, t: 50, b: 50 }
+                }
+            };
+        }
+        
+        // Create scatter plot using Plotly
+        function createScatterPlot(data, columns, analysis) {
+            if (analysis.numericColumns.length < 2) return null;
+            
+            const xCol = analysis.numericColumns[0];
+            const yCol = analysis.numericColumns[1];
+            const colorCol = analysis.textColumns[0]; // Optional color grouping
+            
+            let plotData;
+            
+            if (colorCol && colorCol.uniqueValues <= 10) {
+                // Group by color column
+                const groups = {};
+                data.forEach(row => {
+                    const groupKey = row[colorCol.index];
+                    if (!groups[groupKey]) groups[groupKey] = { x: [], y: [] };
+                    groups[groupKey].x.push(parseFloat(row[xCol.index]));
+                    groups[groupKey].y.push(parseFloat(row[yCol.index]));
+                });
+                
+                plotData = Object.entries(groups).map(([groupName, groupData], index) => ({
+                    x: groupData.x,
+                    y: groupData.y,
+                    mode: 'markers',
+                    type: 'scatter',
+                    name: groupName,
+                    marker: {
+                        color: ['#3A7BD5', '#DB4052', '#00D2FF', '#FF9500', '#00C851'][index % 5],
+                        size: 8
+                    }
+                }));
+            } else {
+                // Single scatter plot
+                plotData = [{
+                    x: data.map(row => parseFloat(row[xCol.index])),
+                    y: data.map(row => parseFloat(row[yCol.index])),
+                    mode: 'markers',
+                    type: 'scatter',
+                    marker: {
+                        color: 'rgba(58, 123, 213, 0.8)',
+                        size: 8
+                    },
+                    name: 'Data Points'
+                }];
+            }
+            
+            return {
+                data: plotData,
+                layout: {
+                    title: `${yCol.name} vs ${xCol.name}`,
+                    xaxis: { title: xCol.name },
+                    yaxis: { title: yCol.name },
+                    margin: { l: 50, r: 50, t: 50, b: 50 }
+                }
+            };
+        }
+        
+        // Create histogram using Plotly
+        function createHistogram(data, columns, analysis) {
+            if (analysis.numericColumns.length === 0) return null;
+            
+            const numericCol = analysis.numericColumns[0];
+            const values = data.map(row => parseFloat(row[numericCol.index])).filter(val => !isNaN(val));
+            
+            return {
+                data: [{
+                    x: values,
+                    type: 'histogram',
+                    marker: {
+                        color: 'rgba(58, 123, 213, 0.8)',
+                        line: { color: 'rgba(58, 123, 213, 1.0)', width: 1 }
+                    },
+                    name: 'Frequency'
+                }],
+                layout: {
+                    title: `Distribution of ${numericCol.name}`,
+                    xaxis: { title: numericCol.name },
+                    yaxis: { title: 'Frequency' },
+                    margin: { l: 50, r: 50, t: 50, b: 50 }
+                }
+            };
+        }
+        
+        // Create box plot using Plotly
+        function createBoxPlot(data, columns, analysis) {
+            if (analysis.numericColumns.length === 0) return null;
+            
+            const numericCol = analysis.numericColumns[0];
+            const values = data.map(row => parseFloat(row[numericCol.index])).filter(val => !isNaN(val));
+            
+            return {
+                data: [{
+                    y: values,
+                    type: 'box',
+                    name: numericCol.name,
+                    marker: { color: 'rgba(58, 123, 213, 0.8)' }
+                }],
+                layout: {
+                    title: `Box Plot of ${numericCol.name}`,
+                    yaxis: { title: numericCol.name },
+                    margin: { l: 50, r: 50, t: 50, b: 50 }
+                }
+            };
+        }
+        
+        // Main visualization generation function
+        function generateVisualization(result, chartType = null) {
+            if (!result || !result.columns || !result.data || result.data.length === 0) {
+                document.getElementById('chart-container').innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-chart-bar fa-3x mb-3"></i>
+                        <p>No data available for visualization</p>
+                    </div>
+                `;
                 return;
             }
-
-            const statusEl = document.getElementById('query-status');
-            statusEl.style.display = 'block';
-            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Executing SQL query...';
-            statusEl.className = 'small mt-2 text-info';
-
-            try {
-                const response = await fetch('/api/v1/analysis/execute-sql', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        sql_query: sqlQuery,
-                        catalog: 'memory',
-                        schema: 'default'
-                    })
-                });
-
-                const result = await response.json();
-                
-                if (response.ok && result.success) {
-                    statusEl.innerHTML = `
-                        <i class="fas fa-check-circle text-success me-1"></i>
-                        Query executed successfully! 
-                        <small>(${result.execution_time_ms.toFixed(1)}ms, ${result.query_result.row_count} rows)</small>
-                    `;
-                    statusEl.className = 'small mt-2 text-success';
-                    
-                    // Display results
-                    displayQueryResults(result.query_result);
-                    
-                    // Show visualization if available
-                    if (result.visualization_recommendation) {
-                        setTimeout(() => {
-                            showVisualizationRecommendation(result.visualization_recommendation);
-                        }, 200);
-                    }
-                } else {
-                    statusEl.innerHTML = `
-                        <i class="fas fa-times-circle text-danger me-1"></i>
-                        Error: ${result.error || 'Unknown error occurred'}
-                    `;
-                    statusEl.className = 'small mt-2 text-danger';
-                    
-                    // Show error result if query_result exists
-                    if (result.query_result) {
-                        displayQueryResults(result.query_result);
-                    }
-                }
-
-            } catch (error) {
-                console.error('Error executing SQL:', error);
-                statusEl.innerHTML = `
-                    <i class="fas fa-times-circle text-danger me-1"></i>
-                    Network error: ${error.message}
+            
+            // Analyze data
+            const analysis = analyzeDataForVisualization(result.data, result.columns);
+            if (!analysis) {
+                document.getElementById('chart-container').innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
+                        <p>Unable to analyze data for visualization</p>
+                    </div>
                 `;
-                statusEl.className = 'small mt-2 text-danger';
+                return;
+            }
+            
+            // Determine chart type
+            const recommendedType = recommendChartType(analysis);
+            const finalChartType = chartType || recommendedType;
+            
+            // Show recommendation
+            showChartRecommendation(recommendedType, analysis);
+            
+            // Update chart type selector
+            const chartTypeSelector = document.getElementById('chart-type-selector');
+            if (chartTypeSelector) {
+                chartTypeSelector.value = finalChartType;
+            }
+            
+            // Generate chart based on type
+            let plotConfig = null;
+            
+            switch (finalChartType) {
+                case 'bar':
+                    plotConfig = createBarChart(result.data, result.columns, analysis);
+                    break;
+                case 'line':
+                    plotConfig = createLineChart(result.data, result.columns, analysis);
+                    break;
+                case 'pie':
+                    plotConfig = createPieChart(result.data, result.columns, analysis);
+                    break;
+                case 'scatter':
+                    plotConfig = createScatterPlot(result.data, result.columns, analysis);
+                    break;
+                case 'histogram':
+                    plotConfig = createHistogram(result.data, result.columns, analysis);
+                    break;
+                case 'box':
+                    plotConfig = createBoxPlot(result.data, result.columns, analysis);
+                    break;
+                default:
+                    // Show table view
+                    document.getElementById('chart-container').innerHTML = `
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-table fa-3x mb-3"></i>
+                            <p>Table view selected. Switch to "Table View" tab to see data.</p>
+                        </div>
+                    `;
+                    return;
+            }
+            
+            if (plotConfig) {
+                // Show chart controls
+                document.getElementById('chart-controls').style.display = 'flex';
+                
+                // Render chart using Plotly
+                Plotly.newPlot('chart-container', plotConfig.data, plotConfig.layout, {
+                    responsive: true,
+                    displayModeBar: true,
+                    modeBarButtonsToAdd: ['pan2d', 'select2d', 'lasso2d'],
+                    displaylogo: false
+                });
+                
+                // Store current visualization data for updates
+                currentVisualization = {
+                    result: result,
+                    analysis: analysis,
+                    chartType: finalChartType
+                };
+            } else {
+                document.getElementById('chart-container').innerHTML = `
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-exclamation-circle fa-3x mb-3"></i>
+                        <p>Unable to create ${finalChartType} chart with this data</p>
+                        <p class="small">Try selecting a different chart type or switch to table view</p>
+                    </div>
+                `;
             }
         }
-
-        // Handle Ctrl+Enter or Cmd+Enter to execute SQL
-        function handleSQLKeyPress(event) {
-            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-                event.preventDefault();
-                executeSQL();
+        
+        // Show chart recommendation
+        function showChartRecommendation(recommendedType, analysis) {
+            const recommendationDiv = document.getElementById('chart-recommendation');
+            const recommendationText = document.getElementById('recommendation-text');
+            
+            if (!recommendationDiv || !recommendationText) return;
+            
+            let message = `AI recommends <strong>${recommendedType}</strong> chart for this data.`;
+            
+            if (analysis) {
+                const details = [];
+                if (analysis.numericColumns.length > 0) {
+                    details.push(`${analysis.numericColumns.length} numeric column(s)`);
+                }
+                if (analysis.textColumns.length > 0) {
+                    details.push(`${analysis.textColumns.length} categorical column(s)`);
+                }
+                if (analysis.dateColumns.length > 0) {
+                    details.push(`${analysis.dateColumns.length} date column(s)`);
+                }
+                
+                if (details.length > 0) {
+                    message += ` <small class="text-muted">(${details.join(', ')})</small>`;
+                }
             }
+            
+            recommendationText.innerHTML = message;
+            recommendationDiv.style.display = 'block';
+        }
+        
+        // Update visualization when chart type changes
+        function updateVisualization() {
+            if (!currentVisualization) return;
+            
+            const chartTypeSelector = document.getElementById('chart-type-selector');
+            const selectedType = chartTypeSelector.value;
+            
+            generateVisualization(currentVisualization.result, selectedType);
+        }
+        
+        // Refresh visualization
+        function refreshVisualization() {
+            if (!currentVisualization) return;
+            
+            generateVisualization(currentVisualization.result, currentVisualization.chartType);
         }
     </script>
 </body>

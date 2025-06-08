@@ -1,5 +1,5 @@
 """
-SQL Analysis API Router
+SQL Analysis API Router - Enhanced with Unity Catalog Integration
 """
 
 from typing import List, Optional, Dict, Any
@@ -10,18 +10,25 @@ import time
 
 from src.models.analysis import (
     QueryRequest, QueryResult, SampleQueryRequest, SampleQueriesResponse,
-    CatalogBrowserResponse, CatalogInfo, SchemaInfo, TableInfo, QueryType
+    CatalogBrowserResponse, CatalogInfo, SchemaInfo, TableInfo, ColumnInfo, QueryType
 )
 from src.services.trino_service import trino_service
+from src.services.catalog_service import catalog_service
 from src.services.activity_log_service import activity_log_service
 from src.models.activity_log import ActivityType, ActivityLogRequest
 
 # Import new unified LLM services
 from src.services.unified_llm_service import unified_llm_service
 from src.services.nl2sql_service import nl2sql_service
+from src.services.intelligent_nl2sql_service import intelligent_nl2sql_service
 from src.services.visualization_service import visualization_service
 from src.config.llm_config import llm_config, LLMProvider, LLMModelConfig
 from src.services.query_execution_service import query_execution_service
+from src.services.schema_context_service import schema_context_service
+
+from src.config.logging_config import get_service_logger
+
+logger = get_service_logger("analysis_api")
 
 router = APIRouter(prefix="/analysis", tags=["SQL Analysis"])
 
@@ -95,44 +102,123 @@ class VisualizationRecommendationResponse(BaseModel):
 @router.get("/health")
 async def check_analysis_health():
     """Check analysis service health"""
-    trino_healthy = await trino_service.health_check()
-    
-    return {
-        "status": "healthy" if trino_healthy else "unhealthy",
-        "trino": trino_healthy,
-        "timestamp": "2025-01-25T10:25:00Z"
-    }
+    try:
+        # Check both Trino and Unified Catalog health
+        trino_healthy = await trino_service.health_check()
+        catalog_healthy = await catalog_service.unity_catalog_service.health_check()
+        
+        return {
+            "status": "healthy" if (trino_healthy or catalog_healthy) else "unhealthy",
+            "trino": trino_healthy,
+            "unity_catalog": catalog_healthy,
+            "unified_catalog": True,
+            "timestamp": "2025-01-25T10:25:00Z",
+            "features": {
+                "sql_execution": trino_healthy,
+                "catalog_browsing": True,
+                "cross_source_joins": trino_healthy and catalog_healthy,
+                "real_time_metadata": catalog_healthy
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "trino": False,
+            "unity_catalog": False,
+            "unified_catalog": False
+        }
 
 
 @router.get("/catalog", response_model=CatalogBrowserResponse)
 async def get_catalog_browser():
-    """Get catalog browser data for sidebar"""
+    """Get unified catalog browser data from Unity Catalog and registered data sources"""
     try:
         # Log activity
         activity_log_service.log_page_view("analysis-catalog", "anonymous")
         
-        response = await trino_service.get_catalog_browser_data()
+        # Get unified catalog tree from Catalog Service
+        catalog_tree = await catalog_service.get_catalog_tree()
+        
+        # Convert unified catalog to analysis format
+        catalogs = []
+        total_schemas = 0
+        total_tables = 0
+        
+        for data_source in catalog_tree.data_sources:
+            # Convert data source to catalog info
+            schemas = []
+            for database in data_source.databases:
+                schema_tables = [table.name for table in database.tables]
+                schema_info = SchemaInfo(
+                    catalog=data_source.name,
+                    name=database.name,
+                    tables=schema_tables,
+                    comment=database.description
+                )
+                schemas.append(schema_info.name)
+                total_schemas += 1
+                total_tables += len(schema_tables)
+            
+            catalog_info = CatalogInfo(
+                name=data_source.name,
+                comment=data_source.description,
+                connector=data_source.type,
+                schemas=schemas
+            )
+            catalogs.append(catalog_info)
+        
+        response = CatalogBrowserResponse(
+            catalogs=catalogs,
+            total_catalogs=len(catalogs),
+            total_schemas=total_schemas,
+            total_tables=total_tables
+        )
+        
+        # Log activity
+        activity_log_service.log_activity(
+            ActivityLogRequest(
+                activity_type=ActivityType.DATA_ACCESS,
+                resource_type="unified_catalog",
+                description=f"Retrieved unified catalog: {len(catalogs)} catalogs, {total_schemas} schemas, {total_tables} tables"
+            ),
+            user_id="anonymous"
+        )
+        
         return response
         
     except Exception as e:
         activity_log_service.log_error(
             ActivityType.DATA_ACCESS,
-            f"Error getting catalog browser data: {str(e)}"
+            f"Error getting unified catalog browser data: {str(e)}"
         )
-        raise HTTPException(status_code=500, detail=f"Failed to get catalog data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get unified catalog data: {str(e)}")
 
 
 @router.get("/catalogs", response_model=List[CatalogInfo])
 async def get_catalogs():
-    """Get available catalogs"""
+    """Get available catalogs from Unity Catalog and registered data sources"""
     try:
-        catalogs = await trino_service.get_catalogs()
+        # Get unified catalog tree
+        catalog_tree = await catalog_service.get_catalog_tree()
+        
+        catalogs = []
+        for data_source in catalog_tree.data_sources:
+            schemas = [database.name for database in data_source.databases]
+            
+            catalog_info = CatalogInfo(
+                name=data_source.name,
+                comment=f"{data_source.description} (Type: {data_source.type})",
+                connector=data_source.type,
+                schemas=schemas
+            )
+            catalogs.append(catalog_info)
         
         # Log activity
         request = ActivityLogRequest(
             activity_type=ActivityType.DATA_ACCESS,
-            resource_type="catalog",
-            description=f"Retrieved {len(catalogs)} catalogs"
+            resource_type="unified_catalog",
+            description=f"Retrieved {len(catalogs)} unified catalogs"
         )
         activity_log_service.log_activity(request, user_id="anonymous")
         
@@ -141,76 +227,166 @@ async def get_catalogs():
     except Exception as e:
         activity_log_service.log_error(
             ActivityType.DATA_ACCESS,
-            f"Error getting catalogs: {str(e)}"
+            f"Error getting unified catalogs: {str(e)}"
         )
-        raise HTTPException(status_code=500, detail=f"Failed to get catalogs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get unified catalogs: {str(e)}")
 
 
 @router.get("/catalogs/{catalog}/schemas", response_model=List[SchemaInfo])
 async def get_schemas(catalog: str):
-    """Get schemas in a catalog"""
+    """Get schemas in a catalog from Unity Catalog"""
     try:
-        schemas = await trino_service.get_schemas(catalog)
+        # Get unified catalog tree
+        catalog_tree = await catalog_service.get_catalog_tree()
+        
+        # Find the data source by name
+        data_source = next((ds for ds in catalog_tree.data_sources if ds.name == catalog), None)
+        
+        if not data_source:
+            raise HTTPException(status_code=404, detail=f"Catalog '{catalog}' not found")
+        
+        schemas = []
+        for database in data_source.databases:
+            schema_info = SchemaInfo(
+                catalog=catalog,
+                name=database.name,
+                tables=[table.name for table in database.tables],
+                comment=database.description
+            )
+            schemas.append(schema_info)
         
         # Log activity
         request = ActivityLogRequest(
             activity_type=ActivityType.DATA_ACCESS,
             resource_type="schema",
             resource_id=catalog,
-            description=f"Retrieved {len(schemas)} schemas from catalog {catalog}"
+            description=f"Retrieved {len(schemas)} schemas from unified catalog {catalog}"
         )
         activity_log_service.log_activity(request, user_id="anonymous")
         
         return schemas
         
+    except HTTPException:
+        raise
     except Exception as e:
         activity_log_service.log_error(
             ActivityType.DATA_ACCESS,
-            f"Error getting schemas for catalog {catalog}: {str(e)}"
+            f"Error getting schemas for unified catalog {catalog}: {str(e)}"
         )
         raise HTTPException(status_code=500, detail=f"Failed to get schemas: {str(e)}")
 
 
 @router.get("/catalogs/{catalog}/schemas/{schema}/tables", response_model=List[TableInfo])
 async def get_tables(catalog: str, schema: str):
-    """Get tables in a schema"""
+    """Get tables in a schema from Unity Catalog"""
     try:
-        tables = await trino_service.get_tables(catalog, schema)
+        # Get unified catalog tree
+        catalog_tree = await catalog_service.get_catalog_tree()
+        
+        # Find the data source and database
+        data_source = next((ds for ds in catalog_tree.data_sources if ds.name == catalog), None)
+        
+        if not data_source:
+            raise HTTPException(status_code=404, detail=f"Catalog '{catalog}' not found")
+        
+        database = next((db for db in data_source.databases if db.name == schema), None)
+        
+        if not database:
+            raise HTTPException(status_code=404, detail=f"Schema '{schema}' not found in catalog '{catalog}'")
+        
+        tables = []
+        for table in database.tables:
+            columns = []
+            for column in table.columns:
+                column_info = ColumnInfo(
+                    name=column.name,
+                    type=column.data_type,
+                    nullable=column.nullable,
+                    default=column.default_value,
+                    comment=column.description
+                )
+                columns.append(column_info)
+            
+            table_info = TableInfo(
+                catalog=catalog,
+                schema=schema,
+                name=table.name,
+                type="TABLE",  # Assume table for now
+                columns=columns,
+                comment=table.description
+            )
+            tables.append(table_info)
         
         # Log activity
         request = ActivityLogRequest(
             activity_type=ActivityType.DATA_ACCESS,
             resource_type="table",
             resource_id=f"{catalog}.{schema}",
-            description=f"Retrieved {len(tables)} tables from {catalog}.{schema}"
+            description=f"Retrieved {len(tables)} tables from unified catalog {catalog}.{schema}"
         )
         activity_log_service.log_activity(request, user_id="anonymous")
         
         return tables
         
+    except HTTPException:
+        raise
     except Exception as e:
         activity_log_service.log_error(
             ActivityType.DATA_ACCESS,
-            f"Error getting tables for {catalog}.{schema}: {str(e)}"
+            f"Error getting tables for unified catalog {catalog}.{schema}: {str(e)}"
         )
         raise HTTPException(status_code=500, detail=f"Failed to get tables: {str(e)}")
 
 
 @router.get("/catalogs/{catalog}/schemas/{schema}/tables/{table}", response_model=TableInfo)
 async def get_table_info(catalog: str, schema: str, table: str):
-    """Get detailed table information"""
+    """Get detailed table information from Unity Catalog"""
     try:
-        table_info = await trino_service.get_table_info(catalog, schema, table)
+        # Get table details from unified catalog
+        data_source_id = None
+        catalog_tree = await catalog_service.get_catalog_tree()
         
-        if not table_info:
-            raise HTTPException(status_code=404, detail="Table not found")
+        # Find the data source ID
+        for ds in catalog_tree.data_sources:
+            if ds.name == catalog:
+                data_source_id = ds.id
+                break
+        
+        if not data_source_id:
+            raise HTTPException(status_code=404, detail=f"Catalog '{catalog}' not found")
+        
+        # Get table details
+        table_details = await catalog_service.get_table_details(data_source_id, schema, table)
+        
+        if not table_details:
+            raise HTTPException(status_code=404, detail=f"Table '{table}' not found")
+        
+        columns = []
+        for column in table_details.columns:
+            column_info = ColumnInfo(
+                name=column.name,
+                type=column.data_type,
+                nullable=column.nullable,
+                default=column.default_value,
+                comment=column.description
+            )
+            columns.append(column_info)
+        
+        table_info = TableInfo(
+            catalog=catalog,
+            schema=schema,
+            name=table,
+            type="TABLE",
+            columns=columns,
+            comment=table_details.description
+        )
         
         # Log activity
         request = ActivityLogRequest(
             activity_type=ActivityType.DATA_ACCESS,
-            resource_type="table",
+            resource_type="table_info",
             resource_id=f"{catalog}.{schema}.{table}",
-            description=f"Retrieved table info for {catalog}.{schema}.{table}"
+            description=f"Retrieved table info for unified catalog {catalog}.{schema}.{table}"
         )
         activity_log_service.log_activity(request, user_id="anonymous")
         
@@ -221,7 +397,7 @@ async def get_table_info(catalog: str, schema: str, table: str):
     except Exception as e:
         activity_log_service.log_error(
             ActivityType.DATA_ACCESS,
-            f"Error getting table info for {catalog}.{schema}.{table}: {str(e)}"
+            f"Error getting table info for unified catalog {catalog}.{schema}.{table}: {str(e)}"
         )
         raise HTTPException(status_code=500, detail=f"Failed to get table info: {str(e)}")
 
@@ -257,39 +433,126 @@ async def generate_sample_queries(request: SampleQueryRequest):
 
 @router.post("/query", response_model=QueryResult)
 async def execute_query(request: QueryRequest, background_tasks: BackgroundTasks):
-    """Execute SQL query"""
+    """Execute SQL query using Unity Catalog with Trino fallback"""
     try:
-        result = await trino_service.execute_query(request)
+        logger.info(f"Executing SQL query: {request.query[:100]}...")
         
-        # Log activity in background
-        def log_query_activity():
-            log_request = ActivityLogRequest(
-                activity_type=ActivityType.DATA_ACCESS,
-                resource_type="query",
-                description=f"Executed SQL query: {request.query[:100]}...",
-                details={
-                    "query": request.query,
-                    "catalog": request.catalog,
-                    "schema": request.schema,
-                    "row_count": result.row_count,
-                    "execution_time_ms": result.execution_time_ms,
-                    "query_id": result.query_id,
-                    "success": result.error is None
-                },
-                execution_time_ms=int(result.execution_time_ms)
+        # Primary: Try Unity Catalog SQL execution first
+        try:
+            catalog_result = await catalog_service.execute_sql_query(
+                query=request.query,
+                catalog=request.catalog,
+                schema=request.schema,
+                limit=request.limit
             )
-            activity_log_service.log_activity(log_request, user_id="anonymous")
+            
+            if catalog_result["success"]:
+                result = QueryResult(
+                    query=request.query,
+                    columns=catalog_result["columns"],
+                    data=catalog_result["data"],
+                    row_count=catalog_result["row_count"],
+                    execution_time_ms=catalog_result["execution_time_ms"],
+                    stats=catalog_result.get("stats", {}),
+                    error=None
+                )
+                
+                # Log activity in background
+                def log_unity_catalog_success():
+                    log_request = ActivityLogRequest(
+                        activity_type=ActivityType.DATA_ACCESS,
+                        resource_type="query",
+                        description=f"Executed SQL query via Unity Catalog: {request.query[:100]}...",
+                        details={
+                            "query": request.query,
+                            "catalog": request.catalog,
+                            "schema": request.schema,
+                            "row_count": result.row_count,
+                            "execution_time_ms": result.execution_time_ms,
+                            "success": True,
+                            "engine": "unity_catalog",
+                            "source": "primary"
+                        },
+                        execution_time_ms=int(result.execution_time_ms)
+                    )
+                    activity_log_service.log_activity(log_request, user_id="anonymous")
+                
+                background_tasks.add_task(log_unity_catalog_success)
+                return result
+            else:
+                logger.warning(f"Unity Catalog execution failed: {catalog_result.get('error', 'Unknown error')}")
+                
+        except Exception as unity_error:
+            logger.warning(f"Unity Catalog execution error: {str(unity_error)}")
         
-        background_tasks.add_task(log_query_activity)
-        
-        return result
-        
+        # Secondary: Fallback to Trino service
+        try:
+            logger.info("Falling back to Trino service for SQL execution")
+            result = await trino_service.execute_query(request)
+            
+            # Log activity in background
+            def log_trino_fallback():
+                log_request = ActivityLogRequest(
+                    activity_type=ActivityType.DATA_ACCESS,
+                    resource_type="query",
+                    description=f"Executed SQL query via Trino fallback: {request.query[:100]}...",
+                    details={
+                        "query": request.query,
+                        "catalog": request.catalog,
+                        "schema": request.schema,
+                        "row_count": result.row_count,
+                        "execution_time_ms": result.execution_time_ms,
+                        "query_id": result.query_id,
+                        "success": result.error is None,
+                        "engine": "trino_fallback",
+                        "source": "fallback"
+                    },
+                    execution_time_ms=int(result.execution_time_ms)
+                )
+                activity_log_service.log_activity(log_request, user_id="anonymous")
+            
+            background_tasks.add_task(log_trino_fallback)
+            return result
+            
+        except Exception as trino_error:
+            logger.error(f"Trino fallback also failed: {str(trino_error)}")
+            
+            # Final fallback: Return demo data with helpful error message
+            activity_log_service.log_error(
+                ActivityType.DATA_ACCESS,
+                f"Both Unity Catalog and Trino failed: Unity={catalog_result.get('error', 'Unknown')} if 'catalog_result' in locals() else str(unity_error), Trino={str(trino_error)}"
+            )
+            
+            # Return demo result with helpful message
+            return QueryResult(
+                query=request.query,
+                columns=["status", "message", "suggestion"],
+                data=[
+                    ["info", "SQL execution engines temporarily unavailable", "Unity Catalog and Trino services are not accessible"],
+                    ["demo", "Demo query result", "This is sample data to demonstrate the interface"],
+                    ["solution", "Setup Trino server", "Install and start Trino server on localhost:8080"],
+                    ["alternative", "Use Unity Catalog", "Configure Unity Catalog for SQL execution"]
+                ],
+                row_count=4,
+                execution_time_ms=50,
+                stats={"engine": "demo", "reason": "service_unavailable"},
+                error=f"SQL execution services unavailable: {str(trino_error)}"
+            )
+            
     except Exception as e:
         activity_log_service.log_error(
             ActivityType.DATA_ACCESS,
-            f"Error executing query: {str(e)}"
+            f"Critical error in query execution: {str(e)}"
         )
-        raise HTTPException(status_code=500, detail=f"Failed to execute query: {str(e)}")
+        
+        return QueryResult(
+            query=request.query,
+            columns=["error"],
+            data=[["Critical query execution error"]],
+            row_count=1,
+            execution_time_ms=0,
+            error=f"Failed to execute query: {str(e)}"
+        )
 
 
 @router.get("/query-types")
@@ -461,72 +724,158 @@ async def recommend_visualization(request: VisualizationRequest):
 
 @router.post("/natural-language-query", response_model=NaturalLanguageQueryResponse)
 async def convert_natural_language_to_sql(request: NaturalLanguageQueryRequest):
-    """Convert natural language query to SQL using LLM"""
+    """Convert natural language query to SQL using intelligent LLM-based analysis with auto-validation and error correction"""
     try:
-        # Get catalog context if not specified
-        catalog_context = None
-        if request.catalog and request.schema:
-            # Get specific catalog/schema context
-            try:
-                tables = await trino_service.get_tables(request.catalog, request.schema)
-                table_details = []
-                for table in tables[:10]:  # Limit to 10 tables to avoid large context
-                    try:
-                        table_info = await trino_service.get_table_info(request.catalog, request.schema, table.name)
-                        table_details.append({
-                            "name": table.name,
-                            "columns": [{"name": col.name, "type": col.type} for col in table_info.columns[:20]]  # Limit columns
-                        })
-                    except:
-                        table_details.append({"name": table.name, "columns": []})
-                
-                catalog_context = {
-                    "catalog": request.catalog,
-                    "schema": request.schema,
-                    "tables": table_details
-                }
-            except:
-                pass
-        else:
-            # Get available catalogs context
-            try:
-                catalogs = await trino_service.get_catalogs()
-                catalog_context = {
-                    "available_catalogs": [{"name": cat.name, "description": cat.comment} for cat in catalogs]
-                }
-            except:
-                pass
+        logger.info(f"Processing intelligent natural language query: {request.query}")
         
-        # Convert natural language to SQL
-        response = await nl2sql_service.convert_natural_language_to_sql(
+        # Use intelligent NL2SQL service for advanced processing with auto-correction
+        result = await intelligent_nl2sql_service.convert_natural_language_to_sql(
             natural_query=request.query,
-            catalog_context=catalog_context,
-            conversation_history=request.conversation_history,
-            model_key=request.model_key
+            model_key=request.model_key or "gpt-3.5-turbo",
+            max_tables=30
         )
         
-        # Log activity
+        # Convert to expected response format
+        response = NaturalLanguageQueryResponse(
+            sql_query=result.sql_query,
+            explanation=result.explanation,
+            confidence=result.confidence,
+            suggested_catalog=result.selected_tables[0].full_name.split('.')[0] if result.selected_tables else "system",
+            suggested_schema=result.selected_tables[0].full_name.split('.')[1] if result.selected_tables else "runtime"
+        )
+        
+        # Enhanced logging with intelligent analysis details and auto-correction info
+        log_details = {
+            "query": request.query,
+            "sql_query": result.sql_query,
+            "confidence": result.confidence,
+            "model_key": request.model_key or "gpt-3.5-turbo",
+            "intent_type": result.query_intent.intent_type,
+            "business_domain": result.query_intent.business_domain,
+            "key_entities": result.query_intent.key_entities,
+            "selected_tables": [t.full_name for t in result.selected_tables],
+            "table_count": len(result.selected_tables),
+            "korean_keywords": result.query_intent.korean_keywords,
+            # New auto-correction information
+            "auto_correction_enabled": True,
+            "fix_attempts": result.fix_attempts,
+            "execution_success": result.execution_success
+        }
+        
+        # Add fix information if auto-correction was applied
+        if result.fix_attempts > 0:
+            log_details.update({
+                "original_sql": result.original_sql,
+                "fixed_sql": result.fixed_sql,
+                "fix_reason": result.fix_reason,
+                "auto_corrected": True
+            })
+            logger.info(f"SQL auto-corrected: {result.fix_reason}")
+        
         log_request = ActivityLogRequest(
             activity_type=ActivityType.AI_SUGGESTION_GENERATE,
-            resource_type="natural_language_query",
-            description=f"Converted natural language to SQL with confidence {response.confidence}",
-            details={
-                "query": request.query,
-                "sql_query": response.sql_query,
-                "confidence": response.confidence,
-                "model_key": request.model_key or "default"
-            }
+            resource_type="intelligent_nl2sql_with_autocorrection",
+            description=f"Generated{'and auto-corrected ' if result.fix_attempts > 0 else ' '}intelligent SQL with confidence {result.confidence}",
+            details=log_details
         )
         activity_log_service.log_activity(log_request, user_id="anonymous")
         
         return response
         
     except Exception as e:
-        activity_log_service.log_error(
-            ActivityType.AI_SUGGESTION_GENERATE,
-            f"Error converting natural language to SQL: {str(e)}"
-        )
-        raise HTTPException(status_code=500, detail=f"Failed to convert natural language to SQL: {str(e)}")
+        logger.error(f"Error in intelligent NL2SQL conversion with auto-correction: {str(e)}")
+        
+        # Fallback to basic NL2SQL service
+        try:
+            logger.info("Falling back to basic NL2SQL service")
+            
+            # Get basic catalog context
+            catalog_context = None
+            if request.catalog and request.schema:
+                try:
+                    tables = await trino_service.get_tables(request.catalog, request.schema)
+                    table_details = []
+                    for table in tables[:10]:
+                        try:
+                            table_info = await trino_service.get_table_info(request.catalog, request.schema, table.name)
+                            table_details.append({
+                                "name": table.name,
+                                "columns": [{"name": col.name, "type": col.type} for col in table_info.columns[:20]]
+                            })
+                        except:
+                            table_details.append({"name": table.name, "columns": []})
+                    
+                    catalog_context = {
+                        "catalog": request.catalog,
+                        "schema": request.schema,
+                        "tables": table_details
+                    }
+                except:
+                    pass
+            
+            # Fallback to basic NL2SQL
+            fallback_response = await nl2sql_service.convert_natural_language_to_sql(
+                natural_query=request.query,
+                catalog_context=catalog_context,
+                conversation_history=request.conversation_history,
+                model_key=request.model_key
+            )
+            
+            # Check if the generated SQL references non-existent tables and provide better fallback
+            if fallback_response.sql_query and "ontology_mysql" in fallback_response.sql_query:
+                # Replace with available memory catalog tables
+                query_lower = request.query.lower()
+                
+                if any(keyword in query_lower for keyword in ["고객", "customer", "사용자"]):
+                    fallback_response.sql_query = "SELECT * FROM memory.default.sample_customers LIMIT 10"
+                    fallback_response.explanation = "고객 정보를 조회하는 샘플 쿼리입니다. 현재 사용 가능한 샘플 데이터를 표시합니다."
+                    fallback_response.confidence = 0.7
+                elif any(keyword in query_lower for keyword in ["앨범", "album", "음악"]):
+                    fallback_response.sql_query = "SELECT * FROM memory.default.albums LIMIT 10"
+                    fallback_response.explanation = "앨범 정보를 조회하는 샘플 쿼리입니다. 현재 사용 가능한 샘플 데이터를 표시합니다."
+                    fallback_response.confidence = 0.7
+                else:
+                    fallback_response.sql_query = "SHOW TABLES FROM memory.default"
+                    fallback_response.explanation = "현재 사용 가능한 테이블 목록을 표시합니다. sample_customers와 albums 테이블이 있습니다."
+                    fallback_response.confidence = 0.8
+            
+            # Enhance fallback explanation to indicate no auto-correction was available
+            fallback_response.explanation += "\n\n⚠️ Auto-correction service unavailable - using basic SQL generation."
+            
+            # Log fallback usage
+            activity_log_service.log_activity(
+                ActivityLogRequest(
+                    activity_type=ActivityType.AI_SUGGESTION_GENERATE,
+                    resource_type="fallback_nl2sql_no_autocorrection",
+                    description=f"Used fallback NL2SQL service due to intelligent service failure: {str(e)}",
+                    details={
+                        "query": request.query,
+                        "auto_correction_enabled": False,
+                        "fallback_reason": str(e),
+                        "sql_query": fallback_response.sql_query
+                    }
+                ),
+                user_id="anonymous"
+            )
+            
+            return fallback_response
+            
+        except Exception as fallback_error:
+            logger.error(f"Both intelligent and fallback NL2SQL failed: {str(fallback_error)}")
+            
+            # Final fallback - return error response
+            activity_log_service.log_error(
+                ActivityType.AI_SUGGESTION_GENERATE,
+                f"Complete NL2SQL failure: Intelligent={str(e)}, Fallback={str(fallback_error)}"
+            )
+            
+            return NaturalLanguageQueryResponse(
+                sql_query="SELECT 'Natural language processing temporarily unavailable' as message",
+                explanation=f"Unable to process '{request.query}' - both intelligent and basic NL2SQL services failed. Auto-correction features are also unavailable.",
+                confidence=0.1,
+                suggested_catalog="system",
+                suggested_schema="runtime"
+            )
 
 
 @router.post("/chat-query")
@@ -913,73 +1262,130 @@ async def test_nl2sql_endpoint(request: NaturalLanguageQueryRequest):
 
 @router.post("/execute-sql", response_model=SQLExecutionResponse)
 async def execute_sql_query(request: SQLExecutionRequest, background_tasks: BackgroundTasks):
-    """Execute SQL query and return results with visualization recommendation"""
+    """Execute SQL query with enhanced features using Unified Catalog Trino engine"""
     try:
-        # Log activity
+        # Log activity in background
         def log_sql_activity():
-            activity_log_service.log_activity(
-                ActivityLogRequest(
-                    activity_type=ActivityType.DATA_ACCESS,
-                    resource_type="sql_query", 
-                    description=f"SQL query executed: {request.sql_query[:100]}..."
-                ),
-                user_id="anonymous"
+            log_request = ActivityLogRequest(
+                activity_type=ActivityType.DATA_ACCESS,
+                resource_type="sql_execution",
+                description=f"Executed SQL via unified catalog: {request.sql_query[:100]}...",
+                details={
+                    "query": request.sql_query,
+                    "catalog": request.catalog,
+                    "schema": request.schema,
+                    "engine": "unified_catalog_trino"
+                }
             )
+            activity_log_service.log_activity(log_request, user_id="anonymous")
         
         background_tasks.add_task(log_sql_activity)
         
-        # Execute SQL query
         start_time = time.time()
-        query_result = await query_execution_service.execute_sql_query(
-            sql_query=request.sql_query,
-            catalog=request.catalog,
-            schema=request.schema
-        )
         
-        # Generate visualization recommendation if we have data
-        visualization_recommendation = None
-        if query_result.data and len(query_result.data) > 0:
-            viz_rec = visualization_service.analyze_data_and_recommend(query_result)
-            visualization_recommendation = {
-                "chart_type": viz_rec.chart_type,
-                "title": viz_rec.title,
-                "description": viz_rec.description,
-                "rationale": viz_rec.rationale,
-                "config": viz_rec.config
-            }
+        # Execute query through Catalog Service's unified Trino integration
+        catalog_result = await catalog_service.execute_sql_query(
+            query=request.sql_query,
+            catalog=request.catalog,
+            schema=request.schema,
+            limit=1000
+        )
         
         execution_time = (time.time() - start_time) * 1000
         
-        return SQLExecutionResponse(
-            query_result=query_result,
-            visualization_recommendation=visualization_recommendation,
-            execution_time_ms=execution_time,
-            success=not bool(query_result.error),
-            error=query_result.error
-        )
-        
+        # Convert catalog result to query result
+        if catalog_result["success"]:
+            query_result = QueryResult(
+                query=request.sql_query,
+                columns=catalog_result["columns"],
+                data=catalog_result["data"],
+                row_count=catalog_result["row_count"],
+                execution_time_ms=catalog_result["execution_time_ms"],
+                stats=catalog_result.get("stats", {}),
+                error=None
+            )
+            
+            # Get visualization recommendation if data is available
+            visualization_recommendation = None
+            if query_result.data and len(query_result.data) > 0:
+                try:
+                    viz_result = await visualization_service.recommend_visualization(
+                        data=query_result.data,
+                        columns=query_result.columns,
+                        user_intent="sql_analysis"
+                    )
+                    if viz_result.get("success"):
+                        visualization_recommendation = viz_result.get("recommendation")
+                except Exception as viz_error:
+                    # Visualization recommendation is optional
+                    pass
+            
+            return SQLExecutionResponse(
+                query_result=query_result,
+                visualization_recommendation=visualization_recommendation,
+                execution_time_ms=execution_time,
+                success=True,
+                error=None
+            )
+        else:
+            # Query failed
+            query_result = QueryResult(
+                query=request.sql_query,
+                columns=[],
+                data=[],
+                row_count=0,
+                execution_time_ms=catalog_result.get("execution_time_ms", 0),
+                error=catalog_result["error"]
+            )
+            
+            return SQLExecutionResponse(
+                query_result=query_result,
+                visualization_recommendation=None,
+                execution_time_ms=execution_time,
+                success=False,
+                error=catalog_result["error"]
+            )
+            
     except Exception as e:
-        logger.error(f"Error executing SQL query: {str(e)}")
-        # Log error activity
-        activity_log_service.log_error(
-            ActivityType.DATA_ACCESS,
-            f"SQL execution error: {str(e)}"
-        )
-        
-        return SQLExecutionResponse(
-            query_result=QueryResult(
+        # Fallback to query_execution_service for backward compatibility
+        try:
+            query_request = QueryRequest(
+                query=request.sql_query,
+                catalog=request.catalog,
+                schema=request.schema
+            )
+            
+            result = await query_execution_service.execute_query_with_context(query_request)
+            
+            execution_time = (time.time() - start_time) * 1000
+            
+            return SQLExecutionResponse(
+                query_result=result,
+                visualization_recommendation=None,
+                execution_time_ms=execution_time,
+                success=result.error is None,
+                error=result.error
+            )
+            
+        except Exception as fallback_error:
+            execution_time = (time.time() - start_time) * 1000
+            
+            query_result = QueryResult(
                 query=request.sql_query,
                 columns=[],
                 data=[],
                 row_count=0,
                 execution_time_ms=0,
-                error=str(e)
-            ),
-            visualization_recommendation=None,
-            execution_time_ms=0,
-            success=False,
-            error=str(e)
-        )
+                error=f"Unified catalog error: {str(e)}, Fallback error: {str(fallback_error)}"
+            )
+            
+            return SQLExecutionResponse(
+                query_result=query_result,
+                visualization_recommendation=None,
+                execution_time_ms=execution_time,
+                success=False,
+                error=f"Failed to execute SQL: {str(e)}"
+            )
 
 @router.post("/visualize-data", response_model=VisualizationRecommendationResponse)
 async def recommend_visualization_for_data(request: QueryResult, model_key: Optional[str] = None):
@@ -1103,4 +1509,94 @@ async def test_schema_context():
             "error": str(e),
             "schema_context": None,
             "formatted_for_llm": None
+        } 
+
+@router.post("/intelligent-nl2sql-debug")
+async def debug_intelligent_nl2sql(request: NaturalLanguageQueryRequest):
+    """Debug endpoint for intelligent NL2SQL service - shows detailed analysis"""
+    try:
+        logger.info(f"Debug processing: {request.query}")
+        
+        # Get detailed result from intelligent service
+        result = await intelligent_nl2sql_service.convert_natural_language_to_sql(
+            natural_query=request.query,
+            model_key=request.model_key or "gpt-3.5-turbo",
+            max_tables=20
+        )
+        
+        # Return detailed debug information
+        return {
+            "status": "success",
+            "query": request.query,
+            "model_key": request.model_key or "gpt-3.5-turbo",
+            "analysis": {
+                "intent_type": result.query_intent.intent_type,
+                "business_domain": result.query_intent.business_domain,
+                "key_entities": result.query_intent.key_entities,
+                "analysis_type": result.query_intent.analysis_type,
+                "korean_keywords": result.query_intent.korean_keywords
+            },
+            "selected_tables": [
+                {
+                    "table_name": t.table_name,
+                    "full_name": t.full_name,
+                    "relevance_score": t.relevance_score,
+                    "reasoning": t.reasoning,
+                    "suggested_role": t.suggested_role
+                }
+                for t in result.selected_tables
+            ],
+            "sql_generation": {
+                "sql_query": result.sql_query,
+                "explanation": result.explanation,
+                "confidence": result.confidence
+            },
+            "schema_summary": {
+                "total_tables_analyzed": len((await schema_context_service.get_comprehensive_schema_context()).tables),
+                "business_domains_found": (await schema_context_service.get_comprehensive_schema_context()).business_domains
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Debug intelligent NL2SQL error: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "query": request.query,
+            "model_key": request.model_key
+        }
+
+@router.get("/schema-context-summary")
+async def get_schema_context_summary():
+    """Get summary of available schema context for debugging"""
+    try:
+        schema_context = await schema_context_service.get_comprehensive_schema_context(max_tables=50)
+        
+        # Group tables by business domain
+        domain_groups = {}
+        for table in schema_context.tables:
+            domain = table.business_context or "uncategorized"
+            if domain not in domain_groups:
+                domain_groups[domain] = []
+            domain_groups[domain].append({
+                "name": table.name,
+                "full_name": table.full_name,
+                "column_count": len(table.columns),
+                "relationships": table.potential_relationships
+            })
+        
+        return {
+            "summary": schema_context.summary,
+            "total_tables": len(schema_context.tables),
+            "total_relationships": len(schema_context.relationships),
+            "business_domains": schema_context.business_domains,
+            "domain_groups": domain_groups,
+            "relationships": schema_context.relationships[:10]  # Show first 10 relationships
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting schema context summary: {str(e)}")
+        return {
+            "error": str(e),
+            "summary": "Schema context unavailable"
         } 
