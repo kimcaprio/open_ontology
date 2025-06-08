@@ -1,0 +1,21 @@
+{
+  "name": "ontology_kwkim",
+  "version": "1.0.0",
+  "description": "A Python-based open-source platform inspired by Palantir's ontology capabilities, integrating Apache Iceberg, MinIO, Unity Catalog, and Ollama for comprehensive data management and analysis.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@xyflow/react": "^12.6.4",
+    "d3": "^7.9.0",
+    "react-arborist": "^3.4.3",
+    "vis-network": "^9.1.10"
+  }
+}

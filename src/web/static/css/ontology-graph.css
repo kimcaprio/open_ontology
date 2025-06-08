@@ -1,0 +1,1279 @@
+/* Advanced Ontology Graph Visualization Styles */
+
+/* Main container styles */
+#ontology-visualization {
+    position: relative;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 8px;
+    overflow: hidden;
+    min-height: 400px;
+}
+
+/* Fullscreen mode */
+.fullscreen-card {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999 !important;
+    border-radius: 0 !important;
+}
+
+.fullscreen-card #ontology-visualization {
+    height: calc(100vh - 120px) !important;
+}
+
+/* Welcome screen styles */
+.ontology-welcome {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px;
+}
+
+.ontology-welcome .features-preview {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+/* Graph controls */
+.graph-controls .btn {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.graph-controls .btn:hover {
+    background: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* D3 Graph Styles */
+.node {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.node:hover {
+    filter: brightness(1.1);
+}
+
+.node rect {
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+}
+
+.node text {
+    pointer-events: none;
+    user-select: none;
+}
+
+/* Edge styles */
+line {
+    transition: all 0.3s ease;
+}
+
+line:hover {
+    stroke-width: 3 !important;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+/* Tree view styles */
+#tree-container {
+    background: #fff;
+    border-radius: 8px;
+}
+
+.tree-controls .btn {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tree-node {
+    transition: all 0.3s ease;
+}
+
+.tree-node-content {
+    border: 1px solid transparent;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.tree-node-content:hover {
+    background-color: #f8f9fa !important;
+    border-color: #dee2e6;
+    transform: translateX(5px);
+}
+
+.tree-node-content.selected {
+    background-color: #e3f2fd !important;
+    border-color: #2196f3;
+}
+
+.tree-toggle {
+    transition: transform 0.3s ease;
+}
+
+.tree-children {
+    border-left: 2px solid #e9ecef;
+    margin-left: 10px;
+    padding-left: 10px;
+}
+
+/* Node details panel */
+.node-details {
+    animation: fadeInUp 0.3s ease;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.action-buttons .btn {
+    transition: all 0.3s ease;
+}
+
+.action-buttons .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Connection details */
+.connection-item {
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+
+.connection-item:hover {
+    border-left-color: #007bff;
+    background-color: #f8f9fa;
+    transform: translateX(5px);
+}
+
+/* Badge styles for node types */
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+.badge.bg-primary {
+    background-color: #007bff !important;
+}
+
+.badge.bg-success {
+    background-color: #28a745 !important;
+}
+
+.badge.bg-warning {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.badge.bg-light {
+    background-color: #f8f9fa !important;
+    color: #495057 !important;
+    border: 1px solid #dee2e6;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .graph-controls {
+        top: 5px !important;
+        right: 5px !important;
+    }
+    
+    .graph-controls .btn {
+        padding: 5px 8px;
+        font-size: 12px;
+    }
+    
+    .tree-controls {
+        top: 5px !important;
+        right: 5px !important;
+    }
+    
+    .feature-item {
+        font-size: 12px;
+    }
+    
+    .ontology-welcome .features-preview {
+        padding: 15px;
+    }
+}
+
+/* Loading animation */
+.loading-spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Ontology list styles */
+.ontology-item {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.ontology-item:hover {
+    border-color: #007bff;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+.ontology-item.selected {
+    border-color: #007bff;
+    background: linear-gradient(135deg, #f8f9ff 0%, #e3f2fd 100%);
+}
+
+/* Card enhancements */
+.card {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.card-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+}
+
+/* Button group enhancements */
+.btn-group .btn {
+    transition: all 0.3s ease;
+}
+
+.btn-group .btn.active {
+    background: #007bff;
+    border-color: #007bff;
+    color: white;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+/* Icon animations */
+.fas {
+    transition: all 0.3s ease;
+}
+
+.btn:hover .fas {
+    transform: scale(1.1);
+}
+
+/* Tooltip styles */
+.tooltip-custom {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.tooltip-custom.show {
+    opacity: 1;
+}
+
+/* Search and filter styles */
+.ontology-search {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    transition: all 0.3s ease;
+}
+
+.ontology-search:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Progress indicators */
+.progress-modern {
+    height: 6px;
+    border-radius: 3px;
+    background: #f1f3f4;
+    overflow: hidden;
+}
+
+.progress-modern .progress-bar {
+    background: linear-gradient(90deg, #4285f4 0%, #34a853 100%);
+    border-radius: 3px;
+    transition: width 0.6s ease;
+}
+
+/* Node type specific colors */
+.node-type-class {
+    background: linear-gradient(135deg, #4285f4 0%, #1a73e8 100%);
+}
+
+.node-type-property {
+    background: linear-gradient(135deg, #34a853 0%, #137333 100%);
+}
+
+.node-type-instance {
+    background: linear-gradient(135deg, #ea4335 0%, #d33b2c 100%);
+}
+
+.node-type-relationship {
+    background: linear-gradient(135deg, #fbbc04 0%, #f9ab00 100%);
+}
+
+/* Accessibility improvements */
+.btn:focus,
+.tree-node-content:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+    .graph-controls,
+    .tree-controls,
+    .action-buttons {
+        display: none !important;
+    }
+    
+    #ontology-visualization {
+        height: auto !important;
+        min-height: 500px;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    #ontology-visualization {
+        background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+    }
+    
+    .ontology-welcome {
+        background: linear-gradient(135deg, #2c3e50 0%, #4a6741 100%);
+    }
+    
+    .card {
+        background: #343a40;
+        color: white;
+    }
+    
+    .card-header {
+        background: linear-gradient(135deg, #495057 0%, #6c757d 100%);
+        color: white;
+    }
+    
+    .tree-node-content {
+        color: white;
+    }
+    
+    .tree-node-content:hover {
+        background-color: #495057 !important;
+    }
+}
+
+/* AI Suggestion Apply Feature Styles */
+.suggestion-item {
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+
+.suggestion-item:hover {
+    border-left-color: #007bff;
+    transform: translateX(5px);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+}
+
+.suggestion-item.applied {
+    border-left-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.suggestion-item.applied .btn-outline-success {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+.suggestion-item.applying {
+    border-left-color: #ffc107;
+    background-color: #fffef5;
+}
+
+/* Progress bar for suggestion confidence */
+.progress-modern {
+    height: 8px;
+    border-radius: 4px;
+    background: #f1f3f4;
+    overflow: hidden;
+}
+
+.progress-modern .progress-bar {
+    background: linear-gradient(90deg, #ea4335 0%, #fbbc04 50%, #34a853 100%);
+    border-radius: 4px;
+    transition: width 0.6s ease;
+}
+
+/* Change History Styles */
+.change-item {
+    transition: all 0.3s ease;
+    border-left: 4px solid #007bff !important;
+}
+
+.change-item:hover {
+    background-color: #f0f8ff !important;
+    transform: translateX(3px);
+}
+
+.change-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+/* Applied suggestion badge animation */
+@keyframes bounceIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.3);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+    70% {
+        transform: scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.badge.bg-success {
+    animation: bounceIn 0.6s ease;
+}
+
+/* Node highlighting for applied changes */
+.node-new {
+    animation: newNodePulse 2s ease-in-out;
+}
+
+.node-modified {
+    animation: modifiedNodeGlow 2s ease-in-out;
+}
+
+@keyframes newNodePulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+    }
+}
+
+@keyframes modifiedNodeGlow {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(0, 123, 255, 0);
+    }
+}
+
+/* Edge highlighting for new relationships */
+.edge-new {
+    animation: newEdgeFlow 2s ease-in-out;
+    stroke-dasharray: 5, 5;
+    animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -10;
+    }
+}
+
+@keyframes newEdgeFlow {
+    0% {
+        stroke-width: 2;
+        opacity: 0.5;
+    }
+    50% {
+        stroke-width: 6;
+        opacity: 1;
+    }
+    100% {
+        stroke-width: 2;
+        opacity: 1;
+    }
+}
+
+/* Loading states */
+.suggestion-loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.suggestion-loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    animation: loading-shine 1.5s infinite;
+}
+
+@keyframes loading-shine {
+    0% {
+        left: -100%;
+    }
+    100% {
+        left: 100%;
+    }
+}
+
+/* Button states */
+.btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.btn-applying {
+    background: linear-gradient(45deg, #ffc107, #fd7e14);
+    border-color: #ffc107;
+    color: white;
+}
+
+/* Modal enhancements */
+.modal-content {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    border-bottom: 1px solid #e9ecef;
+    padding: 1.5rem;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid #e9ecef;
+    padding: 1.5rem;
+}
+
+/* Code highlighting in modals */
+.modal-body pre {
+    font-size: 0.9em;
+    border: 1px solid #e9ecef;
+}
+
+.modal-body code {
+    color: #d63384;
+    background: none;
+}
+
+/* Status indicators */
+.status-applied {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.status-pending {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+.status-failed {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Timestamp formatting */
+.timestamp {
+    font-size: 0.8em;
+    color: #6c757d;
+    font-family: 'Courier New', monospace;
+}
+
+/* Improved tooltips */
+.custom-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.custom-tooltip.show {
+    opacity: 1;
+}
+
+.custom-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Undo button special styling */
+.btn-outline-warning:hover {
+    background: linear-gradient(45deg, #ffc107, #fd7e14);
+    border-color: #ffc107;
+    color: white;
+    transform: translateY(-1px);
+}
+
+/* Success feedback animations */
+.success-flash {
+    animation: successFlash 0.8s ease;
+}
+
+@keyframes successFlash {
+    0%, 100% {
+        background-color: transparent;
+    }
+    50% {
+        background-color: rgba(40, 167, 69, 0.2);
+    }
+}
+
+/* Error feedback animations */
+.error-shake {
+    animation: errorShake 0.5s ease;
+}
+
+@keyframes errorShake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-5px);
+    }
+    75% {
+        transform: translateX(5px);
+    }
+}
+
+/* Connection Mode Styles */
+.ghost-connection {
+    stroke-dasharray: 5,5;
+    stroke-width: 3;
+}
+
+.connection-mode .node {
+    cursor: crosshair !important;
+}
+
+.connection-mode .node rect {
+    transition: all 0.3s ease;
+}
+
+.connection-target-highlight rect {
+    stroke: #28a745 !important;
+    stroke-width: 3 !important;
+    filter: drop-shadow(0 4px 8px rgba(40, 167, 69, 0.4));
+}
+
+/* New Entity Highlighting Styles */
+.new-entity-highlight rect {
+    stroke: #ff6b6b !important;
+    stroke-width: 4 !important;
+    stroke-dasharray: 5,5 !important;
+    animation: newEntityPulse 2s infinite;
+    filter: drop-shadow(0 4px 12px rgba(255, 107, 107, 0.5));
+}
+
+.connection-candidate-high rect {
+    stroke: #28a745 !important;
+    stroke-width: 3 !important;
+    animation: connectionCandidateGlow 2s infinite;
+    filter: drop-shadow(0 3px 8px rgba(40, 167, 69, 0.4));
+}
+
+.connection-candidate-medium rect {
+    stroke: #ffc107 !important;
+    stroke-width: 3 !important;
+    animation: connectionCandidateGlow 2s infinite;
+    filter: drop-shadow(0 3px 8px rgba(255, 193, 7, 0.4));
+}
+
+.connection-candidate-low rect {
+    stroke: #17a2b8 !important;
+    stroke-width: 3 !important;
+    animation: connectionCandidateGlow 2s infinite;
+    filter: drop-shadow(0 3px 8px rgba(23, 162, 184, 0.4));
+}
+
+@keyframes newEntityPulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes connectionCandidateGlow {
+    0%, 100% {
+        opacity: 0.8;
+        stroke-width: 3;
+    }
+    50% {
+        opacity: 1;
+        stroke-width: 4;
+    }
+}
+
+/* Connection tooltip styles */
+.connection-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    max-width: 200px;
+    word-wrap: break-word;
+}
+
+.connection-tooltip::before {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Enhanced connection mode button styles */
+.btn-outline-success.active {
+    background-color: #28a745 !important;
+    border-color: #28a745 !important;
+    color: white !important;
+    animation: activeModeGlow 2s infinite;
+}
+
+@keyframes activeModeGlow {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(40, 167, 69, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 15px rgba(40, 167, 69, 0.8);
+    }
+}
+
+/* Connection creation success feedback */
+.connection-success-flash {
+    animation: connectionSuccessFlash 1s ease;
+}
+
+@keyframes connectionSuccessFlash {
+    0% {
+        stroke: #28a745;
+        stroke-width: 2;
+    }
+    50% {
+        stroke: #28a745;
+        stroke-width: 6;
+        filter: drop-shadow(0 4px 16px rgba(40, 167, 69, 0.8));
+    }
+    100% {
+        stroke: #28a745;
+        stroke-width: 2;
+    }
+}
+
+/* Modal Enhancements */
+.modal-content {
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header.bg-danger {
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+}
+
+.modal-body .table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.property-item {
+    transition: all 0.3s ease;
+}
+
+.property-item:hover {
+    background-color: #f8f9fa;
+    border-radius: 6px;
+}
+
+/* Form Validation Styles */
+.form-control:invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+.form-control:valid {
+    border-color: #28a745;
+    box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+}
+
+/* Connection Table Styles */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+.badge {
+    font-size: 0.75em;
+    padding: 0.35em 0.65em;
+}
+
+.badge.bg-primary {
+    background-color: #007bff !important;
+}
+
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+.badge.bg-info {
+    background-color: #17a2b8 !important;
+}
+
+/* Button Group Improvements */
+.btn-group .btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Connection Creation Flow */
+.connection-flow-step {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.connection-flow-step .fas {
+    margin-right: 0.5rem;
+    color: #007bff;
+}
+
+/* Edge Highlighting */
+.edge-highlighted {
+    stroke: #ffc107 !important;
+    stroke-width: 5px !important;
+    filter: drop-shadow(0 0 8px rgba(255, 193, 7, 0.8));
+    animation: edgePulse 2s infinite;
+}
+
+@keyframes edgePulse {
+    0%, 100% {
+        stroke-width: 3px;
+        opacity: 1;
+    }
+    50% {
+        stroke-width: 6px;
+        opacity: 0.8;
+    }
+}
+
+/* Node Context Menu Preparation */
+.node-context-menu {
+    position: absolute;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1050;
+    min-width: 150px;
+}
+
+.node-context-menu .dropdown-item {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    transition: background-color 0.2s ease;
+}
+
+.node-context-menu .dropdown-item:hover {
+    background-color: #f8f9fa;
+}
+
+.node-context-menu .dropdown-divider {
+    margin: 0.25rem 0;
+}
+
+/* Connection Type Icons */
+.connection-type-relationship::before {
+    content: '\f0c1';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    margin-right: 0.5rem;
+    color: #007bff;
+}
+
+.connection-type-property::before {
+    content: '\f02b';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    margin-right: 0.5rem;
+    color: #28a745;
+}
+
+.connection-type-inheritance::before {
+    content: '\f062';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    margin-right: 0.5rem;
+    color: #6f42c1;
+}
+
+/* Loading States for Modals */
+.modal-loading {
+    position: relative;
+}
+
+.modal-loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.modal-loading::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    z-index: 11;
+}
+
+/* Responsive Modal Improvements */
+@media (max-width: 768px) {
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .btn-sm {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.4rem;
+    }
+    
+    .property-item .form-control {
+        font-size: 0.875rem;
+    }
+}
+
+/* Delete Confirmation Modal */
+.modal-header.bg-danger .btn-close-white {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* Connection Direction Indicators */
+.direction-outgoing {
+    color: #007bff;
+}
+
+.direction-incoming {
+    color: #6c757d;
+}
+
+.direction-outgoing::before {
+    content: '→ ';
+    font-weight: bold;
+}
+
+.direction-incoming::before {
+    content: '← ';
+    font-weight: bold;
+}
+
+/* Enhanced Button States */
+.btn-outline-success:not(.active):hover {
+    background-color: #28a745;
+    border-color: #28a745;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+.btn-outline-warning:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+}
+
+.btn-outline-danger:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+/* Connection suggestion panel styles */
+.connection-suggestions-panel {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    animation: slideInRight 0.3s ease;
+}
+
+.connection-suggestions-panel .panel-header {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.connection-suggestions-panel .panel-header h6 {
+    margin: 0;
+    flex-grow: 1;
+}
+
+.connection-suggestions-panel .panel-header .btn-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.connection-suggestions-panel .panel-body {
+    padding: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.connection-suggestions-panel .suggestion-item {
+    padding: 12px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.connection-suggestions-panel .suggestion-item:hover {
+    background: #f8f9fa;
+    border-color: #007bff;
+    transform: translateX(2px);
+}
+
+.connection-suggestions-panel .suggestion-item:last-child {
+    margin-bottom: 0;
+}
+
+/* Confidence indicators */
+.confidence-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 12px;
+    flex-shrink: 0;
+    position: relative;
+}
+
+.confidence-indicator.confidence-high {
+    background: #28a745;
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.5);
+}
+
+.confidence-indicator.confidence-medium {
+    background: #ffc107;
+    box-shadow: 0 0 8px rgba(255, 193, 7, 0.5);
+}
+
+.confidence-indicator.confidence-low {
+    background: #17a2b8;
+    box-shadow: 0 0 8px rgba(23, 162, 184, 0.5);
+}
+
+.confidence-indicator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 6px;
+    background: white;
+    border-radius: 50%;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Enhanced node highlighting during connection mode */
+.node-source-highlight rect {
+    stroke: #007bff !important;
+    stroke-width: 4 !important;
+    stroke-dasharray: 3,3 !important;
+    animation: sourceNodePulse 1.5s infinite;
+}
+
+.node-candidate-highlight rect {
+    animation: candidateNodeGlow 2s infinite;
+}
+
+@keyframes sourceNodePulse {
+    0%, 100% {
+        stroke-opacity: 1;
+    }
+    50% {
+        stroke-opacity: 0.5;
+    }
+}
+
+@keyframes candidateNodeGlow {
+    0%, 100% {
+        opacity: 0.9;
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.02);
+    }
+}
+
+/* Connection creation feedback */
+.connection-creation-success {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(40, 167, 69, 0.95);
+    color: white;
+    padding: 20px 30px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    z-index: 3000;
+    animation: successPop 2s ease;
+}
+
+@keyframes successPop {
+    0% {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0;
+    }
+    20% {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 1;
+    }
+    80% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(0.8);
+        opacity: 0;
+    }
+}
+
+/* Enhanced drag and drop visual feedback */
+.ghost-connection-enhanced {
+    stroke: #007bff;
+    stroke-width: 4;
+    stroke-dasharray: 8,4;
+    opacity: 0.8;
+    animation: connectionFlowAnimation 1.5s infinite linear;
+}
+
+@keyframes connectionFlowAnimation {
+    0% {
+        stroke-dashoffset: 0;
+    }
+    100% {
+        stroke-dashoffset: 24;
+    }
+} 

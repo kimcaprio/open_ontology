@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="jumbotron bg-primary text-white rounded p-5 mb-4">
+            <h1 class="display-4">
+                <i class="fas fa-project-diagram me-3"></i>
+                Welcome to Ontology Platform
+            </h1>
+            <p class="lead">
+                A Python-based open-source platform for managing data ontologies, 
+                integrating Apache Iceberg, MinIO, Unity Catalog, Trino MPP, and AI-powered analysis.
+            </p>
+            <hr class="my-4">
+            <p>Start by registering your data sources or exploring the existing catalog.</p>
+            <a class="btn btn-light btn-lg" href="/datasources" role="button">
+                <i class="fas fa-plus me-2"></i>Add Data Source
+            </a>
+            <a class="btn btn-outline-light btn-lg ms-2" href="/catalog" role="button">
+                <i class="fas fa-search me-2"></i>Browse Catalog
+            </a>
+            <a class="btn btn-outline-light btn-lg ms-2" href="/analysis" role="button">
+                <i class="fas fa-chart-line me-2"></i>SQL Analysis
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-database fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Data Sources</h5>
+                <p class="card-text">
+                    Register and manage various data sources including databases, 
+                    APIs, and file systems.
+                </p>
+                <a href="/datasources" class="btn btn-primary">
+                    <i class="fas fa-arrow-right me-1"></i>Manage Sources
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-folder-open fa-3x text-success mb-3"></i>
+                <h5 class="card-title">Data Catalog</h5>
+                <p class="card-text">
+                    Browse and search through your unified data catalog with 
+                    metadata and lineage information.
+                </p>
+                <a href="/catalog" class="btn btn-success">
+                    <i class="fas fa-arrow-right me-1"></i>Browse Catalog
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-sitemap fa-3x text-info mb-3"></i>
+                <h5 class="card-title">Ontology</h5>
+                <p class="card-text">
+                    Visualize and manage your data ontology with entities, 
+                    relationships, and semantic mappings.
+                </p>
+                <a href="/ontology" class="btn btn-info">
+                    <i class="fas fa-arrow-right me-1"></i>View Ontology
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-chart-line fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">SQL Analysis</h5>
+                <p class="card-text">
+                    Query and analyze data across multiple databases using 
+                    Trino MPP distributed SQL engine.
+                </p>
+                <a href="/analysis" class="btn btn-warning">
+                    <i class="fas fa-arrow-right me-1"></i>Start Analysis
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <h3>System Status</h3>
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-server fa-2x text-success mb-2"></i>
+                        <h6>API Server</h6>
+                        <span class="badge bg-success">Online</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-cloud fa-2x text-warning mb-2"></i>
+                        <h6>MinIO Storage</h6>
+                        <span class="badge bg-warning">Checking...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-table fa-2x text-warning mb-2"></i>
+                        <h6>Unity Catalog</h6>
+                        <span class="badge bg-warning">Checking...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-brain fa-2x text-warning mb-2"></i>
+                        <h6>Ollama AI</h6>
+                        <span class="badge bg-warning">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <h3>Recent Activity</h3>
+        <div class="card">
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-info-circle text-info me-2"></i>
+                            System initialized successfully
+                        </div>
+                        <small class="text-muted">Just now</small>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            API server started
+                        </div>
+                        <small class="text-muted">Just now</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Check system status
+async function checkSystemStatus() {
+    try {
+        const response = await fetch('/api/v1/system/status');
+        const status = await response.json();
+        updateStatusBadges(status);
+    } catch (error) {
+        console.error('Failed to check system status:', error);
+    }
+}
+
+function updateStatusBadges(status) {
+    // Update status badges based on response
+    // This will be implemented when the API endpoints are ready
+}
+
+// Check status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    checkSystemStatus();
+    // Refresh status every 30 seconds
+    setInterval(checkSystemStatus, 30000);
+});
+</script>
+{% endblock %} 

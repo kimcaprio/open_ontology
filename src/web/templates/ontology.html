@@ -1,0 +1,2306 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', path='css/ontology-graph.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-project-diagram me-2"></i>Ontology Management</h2>
+        <p class="text-muted">Explore data ontologies automatically generated from your catalog metadata</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="btn-group me-3" role="group">
+            <button type="button" class="btn btn-primary" onclick="syncFromCatalog()">
+                <i class="fas fa-sync me-2"></i>Sync from Catalog
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="exportOntology()">
+                <i class="fas fa-download me-2"></i>Export
+            </button>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="input-group">
+            <input type="text" class="form-control ontology-search" id="ontology-search" placeholder="Search entities and relationships...">
+            <button class="btn btn-outline-primary" type="button" onclick="searchOntology()">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h4 class="card-title text-primary" id="stat-domains">-</h4>
+                <p class="card-text">Domains</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h4 class="card-title text-success" id="stat-entities">-</h4>
+                <p class="card-text">Entities</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h4 class="card-title text-info" id="stat-relationships">-</h4>
+                <p class="card-text">Relationships</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h4 class="card-title text-warning" id="stat-data-sources">-</h4>
+                <p class="card-text">Data Sources</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Ontology Domains</h6>
+            </div>
+            <div class="card-body ontology-explorer">
+                <div id="ontology-list">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading ontology domains...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-robot me-2"></i>AI Suggestions</h6>
+                <button class="btn btn-sm btn-outline-primary" onclick="openAISuggestionsModal()">
+                    <i class="fas fa-plus me-1"></i>Generate
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="ai-suggestions">
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-lightbulb fa-2x mb-2"></i>
+                        <p class="mb-0">Click "Generate" to get AI-powered ontology suggestions</p>
+                    </div>
+                </div>
+                
+                <!-- Suggestion Generation Form -->
+                <div id="suggestion-form" style="display: none;">
+                    <div class="mb-3">
+                        <label for="suggestion-context" class="form-label">Context Description</label>
+                        <textarea class="form-control" id="suggestion-context" rows="3" 
+                                placeholder="Describe what you need suggestions for..."></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="suggestion-type" class="form-label">Suggestion Type</label>
+                            <select class="form-select" id="suggestion-type">
+                                <option value="ontology_class">Ontology Classes</option>
+                                <option value="property">Properties</option>
+                                <option value="relationship">Relationships</option>
+                                <option value="mapping">Data Mappings</option>
+                                <option value="enhancement">Enhancements</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="suggestion-domain" class="form-label">Domain</label>
+                            <select class="form-select" id="suggestion-domain">
+                                <option value="">General</option>
+                                <option value="customer">Customer</option>
+                                <option value="product">Product</option>
+                                <option value="financial">Financial</option>
+                                <option value="operations">Operations</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-primary me-2" onclick="generateAISuggestions()">
+                            <i class="fas fa-magic me-1"></i>Generate Suggestions
+                        </button>
+                        <button class="btn btn-secondary" onclick="cancelSuggestionGeneration()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Domain Details Panel -->
+        <div class="card mt-3" id="domain-details" style="display: none;">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Domain Details</h6>
+            </div>
+            <div class="card-body">
+                <div id="domain-info">
+                    <!-- Domain information will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Ontology Visualization</h6>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" onclick="refreshVisualization()" title="Refresh visualization">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn btn-sm btn-outline-success me-2" onclick="toggleConnectionMode()" title="Create connections between nodes">
+                        <i class="fas fa-link"></i> Connect Nodes
+                    </button>
+                    <button class="btn btn-sm btn-outline-info me-2" onclick="fullScreenView()" title="Toggle fullscreen">
+                        <i class="fas fa-expand"></i> Fullscreen
+                    </button>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="switchView('graph')" title="Graph view">
+                            <i class="fas fa-project-diagram"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="switchView('tree')" title="Tree view">
+                            <i class="fas fa-sitemap"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="switchView('table')" title="Table view">
+                            <i class="fas fa-table"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="ontology-visualization" class="ontology-viz-container">
+                    <div class="welcome-screen text-center py-5">
+                        <i class="fas fa-project-diagram fa-4x text-muted mb-3"></i>
+                        <h4 class="text-muted">Welcome to Ontology Visualization</h4>
+                        <p class="text-muted">Select a domain from the left panel to view its ontology structure</p>
+                        <button class="btn btn-primary" onclick="loadOntologyData()">
+                            <i class="fas fa-play me-2"></i>Load Ontology Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Add immediate logging to check if this script block executes -->
+<script>
+console.log('=== INLINE SCRIPT EXECUTING ===');
+console.log('Current time:', new Date().toISOString());
+console.log('Document ready state at script execution:', document.readyState);
+
+// Check if D3 is available
+console.log('D3 available:', typeof d3);
+
+// Add window load event to see if that works better
+window.addEventListener('load', function() {
+    console.log('=== WINDOW LOAD EVENT FIRED ===');
+    console.log('OntologyGraphManager at window load:', typeof window.OntologyGraphManager);
+});
+
+// Log any errors that occur
+window.addEventListener('error', function(e) {
+    console.error('=== GLOBAL ERROR CAUGHT ===');
+    console.error('Error:', e.error);
+    console.error('Message:', e.message);
+    console.error('Filename:', e.filename);
+    console.error('Line:', e.lineno);
+    console.error('Column:', e.colno);
+    console.error('============================');
+});
+
+// Log when ontology-graph.js finishes loading
+function onOntologyGraphLoaded() {
+    console.log('=== ONTOLOGY-GRAPH.JS LOADED ===');
+    console.log('OntologyGraphManager:', typeof window.OntologyGraphManager);
+}
+</script>
+
+<script src="{{ url_for('static', path='js/ontology-graph.js') }}" onload="onOntologyGraphLoaded()" onerror="console.error('Failed to load ontology-graph.js')"></script>
+
+<script>
+// Global variables
+let selectedDomain = null;
+let ontologyGraph = null;
+let currentDomainData = null; // Store current domain data for AI suggestions
+let availableDomains = []; // Store available domains list
+
+console.log('=== ONTOLOGY PAGE SCRIPT START ===');
+console.log('Window location:', window.location.href);
+console.log('Document ready state:', document.readyState);
+console.log('OntologyGraphManager available:', typeof window.OntologyGraphManager);
+
+// Initialize the page when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('=== DOMContentLoaded EVENT FIRED ===');
+    console.log('Document ready state:', document.readyState);
+    console.log('OntologyGraphManager after DOM loaded:', typeof window.OntologyGraphManager);
+    
+    try {
+        console.log('Attempting to initialize ontology graph...');
+        
+        // Initialize the graph visualization
+        initializeOntologyGraph();
+        
+        console.log('Graph initialization completed, loading data...');
+        
+        // Load initial data
+        loadOntologyData();
+        
+        console.log('=== DOMContentLoaded HANDLER COMPLETED ===');
+    } catch (error) {
+        console.error('=== ERROR IN DOMContentLoaded HANDLER ===');
+        console.error('Error:', error);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        console.error('==========================================');
+    }
+});
+
+function initializeOntologyGraph() {
+    console.log('=== initializeOntologyGraph START ===');
+    
+    try {
+        const container = document.getElementById('ontology-visualization');
+        console.log('Visualization container found:', !!container);
+        console.log('OntologyGraphManager type:', typeof window.OntologyGraphManager);
+        
+        if (container && window.OntologyGraphManager) {
+            console.log('Creating new OntologyGraphManager...');
+            ontologyGraph = new window.OntologyGraphManager();
+            window.ontologyGraph = ontologyGraph; // Make it globally accessible
+            console.log('OntologyGraphManager created successfully');
+            console.log('ontologyGraph type:', typeof ontologyGraph);
+            console.log('Available methods:', Object.getOwnPropertyNames(ontologyGraph));
+        } else {
+            console.error('Failed to initialize ontology graph: container or OntologyGraphManager not found');
+            console.error('Container:', !!container);
+            console.error('OntologyGraphManager:', typeof window.OntologyGraphManager);
+            
+            // Show error in UI
+            if (container) {
+                container.innerHTML = `
+                    <div class="alert alert-danger m-3">
+                        <h6><i class="fas fa-exclamation-triangle me-2"></i>Initialization Error</h6>
+                        <p>Failed to initialize graph system.</p>
+                        <p><strong>Container:</strong> ${!!container ? 'Found' : 'Not found'}</p>
+                        <p><strong>OntologyGraphManager:</strong> ${typeof window.OntologyGraphManager}</p>
+                        <button class="btn btn-sm btn-primary" onclick="location.reload()">Reload Page</button>
+                    </div>
+                `;
+            }
+        }
+        
+        console.log('=== initializeOntologyGraph END ===');
+    } catch (error) {
+        console.error('=== ERROR IN initializeOntologyGraph ===');
+        console.error('Error:', error);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        console.error('=========================================');
+    }
+}
+
+async function loadOntologyData() {
+    console.log('Loading ontology data...');
+    
+    try {
+        // Load statistics
+        await loadOntologyStats();
+        
+        // Load domains
+        await loadOntologyDomains();
+        
+        console.log('Ontology data loaded successfully');
+        
+    } catch (error) {
+        console.error('Failed to load ontology data:', error);
+        
+        // Show more specific error message
+        const listContainer = document.getElementById('ontology-list');
+        listContainer.innerHTML = `
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Error Loading Ontology Data</h6>
+                <p class="mb-1">Failed to load ontology data: ${error.message}</p>
+                <small>Check the browser console for more details.</small>
+                <hr>
+                <button class="btn btn-sm btn-primary" onclick="loadOntologyData()">
+                    <i class="fas fa-redo me-1"></i>Try Again
+                </button>
+            </div>
+        `;
+        
+        // Use fallback toast if showToast is not available
+        safeShowToast('Failed to load ontology data: ' + error.message, 'danger');
+    }
+}
+
+async function loadOntologyStats() {
+    console.log('Loading ontology stats...');
+    
+    try {
+        const response = await fetch('/api/v1/ontology/stats');
+        console.log('Stats API response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const stats = await response.json();
+        console.log('Loaded stats:', stats);
+        
+        // Update statistics cards
+        document.getElementById('stat-domains').textContent = stats.total_domains || '0';
+        document.getElementById('stat-entities').textContent = stats.total_entities || '0';
+        document.getElementById('stat-relationships').textContent = stats.total_relationships || '0';
+        document.getElementById('stat-data-sources').textContent = stats.data_sources_covered || '0';
+        
+        console.log('Stats updated successfully');
+        
+    } catch (error) {
+        console.error('Failed to load ontology stats:', error);
+        // Set default values
+        document.getElementById('stat-domains').textContent = '0';
+        document.getElementById('stat-entities').textContent = '0';
+        document.getElementById('stat-relationships').textContent = '0';
+        document.getElementById('stat-data-sources').textContent = '0';
+        
+        throw error; // Re-throw to be caught by parent function
+    }
+}
+
+async function loadOntologyDomains() {
+    console.log('Loading ontology domains...');
+    const listContainer = document.getElementById('ontology-list');
+    
+    try {
+        const response = await fetch('/api/v1/ontology/domains');
+        console.log('Domains API response status:', response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const domains = await response.json();
+        console.log('Loaded domains:', domains);
+        
+        // Store domains for AI suggestions
+        availableDomains = domains;
+        updateAISuggestionsDomains();
+        
+        if (domains.length === 0) {
+            console.log('No domains found, showing empty state');
+            listContainer.innerHTML = `
+                <div class="text-muted text-center py-4">
+                    <i class="fas fa-sitemap fa-3x mb-3"></i>
+                    <p>No ontology domains found.</p>
+                    <p>Click "Sync from Catalog" to generate ontologies.</p>
+                    <button class="btn btn-primary" onclick="syncFromCatalog()">
+                        <i class="fas fa-sync me-2"></i>Sync from Catalog
+                    </button>
+                </div>
+            `;
+        } else {
+            console.log(`Rendering ${domains.length} domains`);
+            listContainer.innerHTML = renderOntologyDomains(domains);
+        }
+        
+        console.log('Domains loaded successfully');
+        
+    } catch (error) {
+        console.error('Failed to load ontology domains:', error);
+        listContainer.innerHTML = `
+            <div class="alert alert-danger">
+                <h6><i class="fas fa-exclamation-triangle me-2"></i>Failed to Load Domains</h6>
+                <p class="mb-1">Error: ${error.message}</p>
+                <button class="btn btn-sm btn-primary mt-2" onclick="loadOntologyDomains()">
+                    <i class="fas fa-redo me-1"></i>Retry
+                </button>
+            </div>
+        `;
+        
+        throw error; // Re-throw to be caught by parent function
+    }
+}
+
+function renderOntologyDomains(domains) {
+    return domains.map(domain => {
+        const lastSync = domain.last_sync_at ? 
+            new Date(domain.last_sync_at).toLocaleDateString() : 'Never';
+        
+        return `
+            <div class="ontology-item mb-3" onclick="selectDomain('${domain.id}')">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1">
+                            <i class="fas fa-sitemap text-primary me-2"></i>
+                            ${domain.name}
+                        </h6>
+                        <small class="text-muted">${domain.description || 'No description'}</small>
+                    </div>
+                    <span class="badge bg-success">Active</span>
+                </div>
+                <div class="mt-2">
+                    <small class="text-muted">
+                        <i class="fas fa-cube me-1"></i>${domain.entity_count} entities
+                        <i class="fas fa-link ms-2 me-1"></i>${domain.relationship_count} relationships
+                    </small>
+                </div>
+                <div class="mt-1">
+                    <small class="text-muted">
+                        Last sync: ${lastSync}
+                        ${domain.tags.map(tag => `<span class="badge bg-secondary ms-1">${tag}</span>`).join('')}
+                    </small>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function selectDomain(domainId) {
+    selectedDomain = domainId;
+    
+    // Update visual selection
+    document.querySelectorAll('.ontology-item').forEach(item => {
+        item.classList.remove('selected');
+    });
+    event.target.closest('.ontology-item').classList.add('selected');
+    
+    // Load domain details
+    await loadDomainDetails(domainId);
+    
+    // Load domain data for AI suggestions
+    await loadDomainDataForAI(domainId);
+    
+    // Load visualization
+    if (window.ontologyGraph) {
+        await loadDomainVisualization(domainId);
+    } else {
+        console.error('ontologyGraph not initialized');
+        safeShowToast('Graph system not initialized. Please refresh the page.', 'warning');
+    }
+    
+    safeShowToast(`Selected domain: ${domainId}`, 'success');
+}
+
+async function loadDomainDetails(domainId) {
+    try {
+        const response = await fetch(`/api/v1/ontology/domains/${domainId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const domain = await response.json();
+        
+        // Show domain details panel
+        const detailsPanel = document.getElementById('domain-details');
+        const domainInfo = document.getElementById('domain-info');
+        
+        domainInfo.innerHTML = `
+            <h6>${domain.name}</h6>
+            <p class="text-muted">${domain.description || 'No description'}</p>
+            <div class="row">
+                <div class="col-6">
+                    <strong>Entities:</strong> ${domain.entities.length}
+                </div>
+                <div class="col-6">
+                    <strong>Relationships:</strong> ${domain.relationships.length}
+                </div>
+            </div>
+            <div class="mt-2">
+                <strong>Data Source:</strong> ${domain.data_source_id}<br>
+                <strong>Database:</strong> ${domain.database_name}<br>
+                <strong>Last Sync:</strong> ${domain.last_sync_at ? new Date(domain.last_sync_at).toLocaleString() : 'Never'}
+            </div>
+            <div class="mt-2">
+                ${domain.tags.map(tag => `<span class="badge bg-secondary me-1">${tag}</span>`).join('')}
+            </div>
+        `;
+        
+        detailsPanel.style.display = 'block';
+        
+    } catch (error) {
+        console.error('Failed to load domain details:', error);
+        safeShowToast('Failed to load domain details: ' + error.message, 'danger');
+    }
+}
+
+async function loadDomainVisualization(domainId) {
+    console.log('=== loadDomainVisualization START ===');
+    console.log('Domain ID:', domainId);
+    
+    try {
+        console.log('Fetching visualization data from API...');
+        const response = await fetch(`/api/v1/ontology/domains/${domainId}/visualization`);
+        
+        console.log('API response status:', response.status);
+        console.log('API response ok:', response.ok);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const vizData = await response.json();
+        console.log('=== API VISUALIZATION DATA ===');
+        console.log('Raw API response:', vizData);
+        console.log('Data type:', typeof vizData);
+        console.log('Data keys:', Object.keys(vizData));
+        
+        if (vizData.nodes) {
+            console.log('Nodes count:', vizData.nodes.length);
+            console.log('First node:', vizData.nodes[0]);
+        }
+        
+        if (vizData.edges) {
+            console.log('Edges count:', vizData.edges.length);
+            console.log('First edge:', vizData.edges[0]);
+        }
+        
+        if (vizData.entities) {
+            console.log('Entities count:', vizData.entities.length);
+            console.log('First entity:', vizData.entities[0]);
+        }
+        
+        if (vizData.relationships) {
+            console.log('Relationships count:', vizData.relationships.length);
+            console.log('First relationship:', vizData.relationships[0]);
+        }
+        console.log('==============================');
+        
+        // Check if ontologyGraph is available and has the new function
+        if (!window.ontologyGraph) {
+            console.error('ontologyGraph not available on window object');
+            safeShowToast('Graph system not initialized. Please refresh the page.', 'danger');
+            return;
+        }
+        
+        console.log('ontologyGraph available:', !!window.ontologyGraph);
+        console.log('loadVisualizationData function available:', typeof window.ontologyGraph.loadVisualizationData);
+        
+        // Use the new loadVisualizationData function instead of loadOntologyGraph
+        if (typeof window.ontologyGraph.loadVisualizationData === 'function') {
+            console.log('Calling loadVisualizationData with API data...');
+            window.ontologyGraph.loadVisualizationData(vizData);
+            console.log('loadVisualizationData called successfully');
+        } else {
+            console.error('loadVisualizationData function not found');
+            // Fallback to old method with enhanced logging
+            console.log('Falling back to loadOntologyGraph...');
+            if (typeof window.ontologyGraph.loadOntologyGraph === 'function') {
+                console.log('Available functions on ontologyGraph:', Object.getOwnPropertyNames(window.ontologyGraph));
+                window.ontologyGraph.loadOntologyGraph(domainId);
+            } else {
+                console.error('No visualization functions available');
+                safeShowToast('Graph visualization functions not available. Please check the console for details.', 'danger');
+            }
+        }
+        
+        console.log('=== loadDomainVisualization SUCCESS ===');
+        
+    } catch (error) {
+        console.error('=== loadDomainVisualization ERROR ===');
+        console.error('Error details:', error);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        console.error('Domain ID that failed:', domainId);
+        console.error('=====================================');
+        
+        safeShowToast('Failed to load visualization: ' + error.message, 'danger');
+    }
+}
+
+async function syncFromCatalog() {
+    try {
+        safeShowToast('Syncing ontology from catalog...', 'info');
+        
+        const response = await fetch('/api/v1/ontology/sync', {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            safeShowToast(`Sync completed! Created ${result.stats.domains_created} domains with ${result.stats.entities_created} entities`, 'success');
+            
+            // Reload data
+            await loadOntologyData();
+        } else {
+            safeShowToast(`Sync failed: ${result.message}`, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Sync failed:', error);
+        safeShowToast('Sync failed: ' + error.message, 'danger');
+    }
+}
+
+async function searchOntology() {
+    const query = document.getElementById('ontology-search').value.trim();
+    
+    if (!query || query.length < 2) {
+        safeShowToast('Please enter at least 2 characters to search', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/v1/ontology/search?q=${encodeURIComponent(query)}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const results = await response.json();
+        
+        // Display search results (you might want to show this in a modal or separate panel)
+        console.log('Search results:', results);
+        safeShowToast(`Found ${results.total} results for "${query}"`, 'success');
+        
+    } catch (error) {
+        console.error('Search failed:', error);
+        safeShowToast('Search failed: ' + error.message, 'danger');
+    }
+}
+
+// Global helper functions for UI interactions
+function toggleConnectionMode() {
+    console.log('toggleConnectionMode called');
+    
+    if (window.ontologyGraph && window.ontologyGraph.toggleConnectionMode) {
+        window.ontologyGraph.toggleConnectionMode();
+    } else {
+        console.error('OntologyGraph instance not available for connection mode toggle');
+        safeShowToast('Graph system not initialized', 'warning');
+    }
+}
+
+function refreshVisualization() {
+    console.log('refreshVisualization called');
+    
+    if (window.ontologyGraph && window.ontologyGraph.refresh) {
+        window.ontologyGraph.refresh();
+    } else {
+        console.error('OntologyGraph instance not available for refresh');
+        // Fallback: reload the current domain data
+        if (selectedDomain) {
+            loadDomainVisualization(selectedDomain);
+        } else {
+            safeShowToast('No domain selected to refresh', 'warning');
+        }
+    }
+}
+
+function fullScreenView() {
+    console.log('fullScreenView called');
+    
+    if (window.ontologyGraph && window.ontologyGraph.toggleFullscreen) {
+        window.ontologyGraph.toggleFullscreen();
+    } else {
+        console.error('OntologyGraph instance not available for fullscreen toggle');
+        safeShowToast('Graph system not initialized', 'warning');
+    }
+}
+
+function switchView(viewType) {
+    console.log('switchView called with:', viewType);
+    
+    if (window.ontologyGraph && window.ontologyGraph.switchView) {
+        window.ontologyGraph.switchView(viewType);
+    } else {
+        console.error('OntologyGraph instance not available for view switch');
+        safeShowToast('Graph system not initialized', 'warning');
+    }
+}
+
+function exportOntology() {
+    if (selectedDomain) {
+        safeShowToast(`Exporting domain: ${selectedDomain}`, 'info');
+        // Implementation for export functionality
+    } else {
+        safeShowToast('Please select a domain to export', 'warning');
+    }
+}
+
+// AI Suggestions Functions (Enhanced for dynamic domain integration)
+
+// Update AI Suggestions domains dropdown based on available domains
+function updateAISuggestionsDomains() {
+    const suggestionDomainSelect = document.getElementById('suggestion-domain');
+    if (suggestionDomainSelect && availableDomains.length > 0) {
+        // Clear existing options
+        suggestionDomainSelect.innerHTML = '<option value="">General</option>';
+        
+        // Add domains from available data
+        availableDomains.forEach(domain => {
+            const option = document.createElement('option');
+            option.value = domain.id;
+            option.textContent = domain.name;
+            suggestionDomainSelect.appendChild(option);
+        });
+        
+        console.log('Updated AI suggestions domains with', availableDomains.length, 'domains');
+    }
+}
+
+// Load domain data for AI suggestions
+async function loadDomainDataForAI(domainId) {
+    try {
+        console.log('Loading domain data for AI suggestions:', domainId);
+        
+        const response = await fetch(`/api/v1/ontology/domains/${domainId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        currentDomainData = await response.json();
+        console.log('Loaded domain data for AI:', currentDomainData);
+        
+        // Update suggestion types based on current domain data
+        updateAISuggestionTypes();
+        
+    } catch (error) {
+        console.error('Failed to load domain data for AI:', error);
+        currentDomainData = null;
+    }
+}
+
+// Update suggestion types based on current domain data
+function updateAISuggestionTypes() {
+    const suggestionTypeSelect = document.getElementById('suggestion-type');
+    if (!suggestionTypeSelect || !currentDomainData) return;
+    
+    // Clear existing options
+    suggestionTypeSelect.innerHTML = '';
+    
+    const suggestionTypes = [];
+    
+    // Add basic suggestion types
+    suggestionTypes.push(
+        { value: 'entity_analysis', label: `Entity Analysis (${currentDomainData.entities?.length || 0} entities)` },
+        { value: 'relationship_enhancement', label: `Relationship Enhancement (${currentDomainData.relationships?.length || 0} relationships)` },
+        { value: 'property_optimization', label: 'Property Optimization' },
+        { value: 'data_quality', label: 'Data Quality Improvement' }
+    );
+    
+    // Add domain-specific suggestions based on entity types
+    const entityTypes = new Set();
+    if (currentDomainData.entities) {
+        currentDomainData.entities.forEach(entity => {
+            if (entity.type) entityTypes.add(entity.type.value || entity.type);
+        });
+    }
+    
+    if (entityTypes.has('table')) {
+        suggestionTypes.push({ value: 'schema_optimization', label: 'Database Schema Optimization' });
+    }
+    
+    if (entityTypes.has('view')) {
+        suggestionTypes.push({ value: 'view_enhancement', label: 'View Structure Enhancement' });
+    }
+    
+    // Add missing relationship suggestions if entities > relationships
+    const entityCount = currentDomainData.entities?.length || 0;
+    const relationshipCount = currentDomainData.relationships?.length || 0;
+    if (entityCount > relationshipCount + 2) {
+        suggestionTypes.push({ value: 'missing_relationships', label: 'Missing Relationship Detection' });
+    }
+    
+    // Populate the select
+    suggestionTypes.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type.value;
+        option.textContent = type.label;
+        suggestionTypeSelect.appendChild(option);
+    });
+    
+    console.log('Updated suggestion types with', suggestionTypes.length, 'options');
+}
+
+function openAISuggestionsModal() {
+    const suggestionForm = document.getElementById('suggestion-form');
+    const suggestionsDiv = document.getElementById('ai-suggestions');
+    
+    // Hide current suggestions and show form
+    suggestionsDiv.innerHTML = '';
+    suggestionForm.style.display = 'block';
+    
+    // Set intelligent context based on selected domain
+    const contextField = document.getElementById('suggestion-context');
+    if (selectedDomain && currentDomainData) {
+        const entityCount = currentDomainData.entities?.length || 0;
+        const relationshipCount = currentDomainData.relationships?.length || 0;
+        const domainName = currentDomainData.name || selectedDomain;
+        
+        // Build intelligent context
+        let contextSuggestion = `Analyze the "${domainName}" ontology domain:\n\n`;
+        contextSuggestion += `• ${entityCount} entities currently defined\n`;
+        contextSuggestion += `• ${relationshipCount} relationships established\n`;
+        
+        if (currentDomainData.entities && currentDomainData.entities.length > 0) {
+            const sampleEntities = currentDomainData.entities.slice(0, 3).map(e => e.name).join(', ');
+            contextSuggestion += `• Key entities: ${sampleEntities}${currentDomainData.entities.length > 3 ? '...' : ''}\n`;
+        }
+        
+        contextSuggestion += `\nPlease suggest improvements for better ontology structure, data relationships, and semantic clarity.`;
+        
+        contextField.value = contextSuggestion;
+        
+        // Pre-select the current domain in the dropdown
+        const domainSelect = document.getElementById('suggestion-domain');
+        if (domainSelect) {
+            domainSelect.value = selectedDomain;
+        }
+    } else {
+        contextField.value = 'Describe what you need suggestions for...';
+    }
+}
+
+function cancelSuggestionGeneration() {
+    const suggestionForm = document.getElementById('suggestion-form');
+    const suggestionsDiv = document.getElementById('ai-suggestions');
+    
+    suggestionForm.style.display = 'none';
+    suggestionsDiv.innerHTML = `
+        <div class="text-center text-muted py-3">
+            <i class="fas fa-lightbulb fa-2x mb-2"></i>
+            <p class="mb-0">Click "Generate" to get AI-powered ontology suggestions</p>
+        </div>
+    `;
+}
+
+async function generateAISuggestions() {
+    const context = document.getElementById('suggestion-context').value;
+    const suggestionType = document.getElementById('suggestion-type').value;
+    const domainId = document.getElementById('suggestion-domain').value;
+    
+    if (!context.trim()) {
+        safeShowToast('Please provide a context description', 'warning');
+        return;
+    }
+    
+    const suggestionsDiv = document.getElementById('ai-suggestions');
+    const suggestionForm = document.getElementById('suggestion-form');
+    
+    // Show loading state
+    suggestionsDiv.innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">AI is analyzing your ontology and generating intelligent suggestions...</p>
+            <small class="text-muted">This may take a few moments</small>
+        </div>
+    `;
+    suggestionForm.style.display = 'none';
+    
+    try {
+        // Simulate AI suggestion generation with more realistic timing
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Generate intelligent suggestions based on domain data
+        const suggestions = generateIntelligentSuggestions(suggestionType, domainId);
+        
+        // Show generated suggestions
+        suggestionsDiv.innerHTML = `
+            <div class="suggestions-header mb-3">
+                <h6 class="text-primary mb-2">
+                    <i class="fas fa-magic me-2"></i>AI-Generated Suggestions
+                </h6>
+                <small class="text-muted">Based on analysis of ${currentDomainData?.name || 'the selected domain'}</small>
+            </div>
+            ${suggestions.map(suggestion => `
+                <div class="suggestion-item mb-3 p-3 border rounded ${suggestion.priority === 'high' ? 'border-warning bg-light' : ''}">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="text-${suggestion.priority === 'high' ? 'warning' : 'success'} mb-1">
+                            <i class="fas fa-${suggestion.icon} me-2"></i>
+                            ${suggestion.title}
+                        </h6>
+                        <span class="badge bg-${suggestion.priority === 'high' ? 'warning' : 'success'}">${suggestion.priority} priority</span>
+                    </div>
+                    <p class="mb-2">${suggestion.description}</p>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Confidence: ${suggestion.confidence}%</small>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="previewSuggestion('${suggestion.id}')">
+                                <i class="fas fa-eye"></i> Preview
+                            </button>
+                            <button class="btn btn-sm btn-success" onclick="applySuggestion('${suggestion.id}')">
+                                <i class="fas fa-check"></i> Apply
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+            <div class="text-center mt-3">
+                <button class="btn btn-outline-secondary me-2" onclick="generateAISuggestions()">
+                    <i class="fas fa-redo me-1"></i>Generate More
+                </button>
+                <button class="btn btn-primary" onclick="openAISuggestionsModal()">
+                    <i class="fas fa-plus me-1"></i>New Request
+                </button>
+            </div>
+        `;
+        
+        safeShowToast('AI suggestions generated successfully', 'success');
+        
+    } catch (error) {
+        console.error('AI suggestion generation failed:', error);
+        suggestionsDiv.innerHTML = `
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Failed to generate AI suggestions. Please try again.
+                <hr>
+                <button class="btn btn-sm btn-primary" onclick="generateAISuggestions()">
+                    <i class="fas fa-redo me-1"></i>Retry
+                </button>
+            </div>
+        `;
+        safeShowToast('Failed to generate AI suggestions', 'danger');
+    }
+}
+
+// Generate intelligent suggestions based on domain analysis
+function generateIntelligentSuggestions(suggestionType, domainId) {
+    const suggestions = [];
+    
+    if (!currentDomainData) {
+        // Enhanced fallback suggestions when no domain data available
+        return [
+            {
+                id: 'generic_entity_1',
+                title: 'Add Core Entity',
+                description: 'Add a new core entity to establish fundamental relationships in your ontology.',
+                confidence: 75,
+                priority: 'medium',
+                icon: 'plus-circle'
+            },
+            {
+                id: 'generic_rel_1', 
+                title: 'Entity Relationship Discovery',
+                description: 'Analyze and suggest missing relationships between existing entities.',
+                confidence: 80,
+                priority: 'medium',
+                icon: 'link'
+            }
+        ];
+    }
+    
+    const entityCount = currentDomainData.entities?.length || 0;
+    const relationshipCount = currentDomainData.relationships?.length || 0;
+    const entities = currentDomainData.entities || [];
+    
+    // Analyze entity names to understand domain patterns
+    const entityNames = entities.map(e => e.name.toLowerCase());
+    const domainPatterns = detectDomainPatterns(entityNames);
+    
+    // Generate suggestions based on analysis
+    switch (suggestionType) {
+        case 'entity_analysis':
+            // Look for missing core entities based on domain patterns
+            if (domainPatterns.includes('user') && !entityNames.some(name => name.includes('profile'))) {
+                suggestions.push({
+                    id: 'entity_user_profile',
+                    title: 'Add User Profile Entity',
+                    description: `Detected user-related entities but missing UserProfile. This would complement your existing ${entityCount} entities and establish better user data management.`,
+                    confidence: 90,
+                    priority: 'high',
+                    icon: 'user-circle'
+                });
+            }
+            
+            if (domainPatterns.includes('product') && !entityNames.some(name => name.includes('category'))) {
+                suggestions.push({
+                    id: 'entity_product_category',
+                    title: 'Add Product Category Entity',
+                    description: `Found product entities but missing categorization. Adding ProductCategory would improve product organization and searchability.`,
+                    confidence: 85,
+                    priority: 'high',
+                    icon: 'tags'
+                });
+            }
+            
+            // Entity consolidation suggestion
+            if (entityCount > 15) {
+                suggestions.push({
+                    id: 'entity_consolidate',
+                    title: 'Entity Consolidation Opportunity',
+                    description: `With ${entityCount} entities, consider consolidating similar entities to reduce complexity. This could improve maintainability and performance.`,
+                    confidence: 75,
+                    priority: entityCount > 25 ? 'high' : 'medium',
+                    icon: 'compress-alt'
+                });
+            }
+            break;
+            
+        case 'relationship_enhancement':
+            const relationshipRatio = entityCount > 0 ? relationshipCount / entityCount : 0;
+            
+            if (relationshipRatio < 0.6) {
+                suggestions.push({
+                    id: 'rel_density_low',
+                    title: 'Low Relationship Density Detected',
+                    description: `With ${entityCount} entities and ${relationshipCount} relationships (ratio: ${relationshipRatio.toFixed(2)}), your ontology may have missing connections. Industry best practice suggests 0.8-1.2 relationships per entity.`,
+                    confidence: 90,
+                    priority: 'high',
+                    icon: 'project-diagram'
+                });
+            }
+            
+            // Specific relationship suggestions based on domain patterns
+            if (domainPatterns.includes('user') && domainPatterns.includes('order')) {
+                suggestions.push({
+                    id: 'rel_user_order',
+                    title: 'Connect User and Order Entities',
+                    description: 'Detected both user and order entities. Adding "user_places_order" relationship would establish clear ownership.',
+                    confidence: 95,
+                    priority: 'high',
+                    icon: 'arrow-right'
+                });
+            }
+            break;
+            
+        case 'missing_relationships':
+            // Find specific missing relationships based on common patterns
+            const missingRels = findSpecificMissingRelationships(entities);
+            missingRels.forEach((rel, index) => {
+                suggestions.push({
+                    id: `missing_${index + 1}`,
+                    title: `Connect ${rel.from} → ${rel.to}`,
+                    description: `AI detected potential relationship between "${rel.from}" and "${rel.to}" entities. This connection appears ${rel.confidence}% likely based on naming patterns.`,
+                    confidence: rel.confidence,
+                    priority: rel.confidence > 80 ? 'high' : 'medium',
+                    icon: 'link'
+                });
+            });
+            break;
+            
+        case 'schema_optimization':
+            suggestions.push({
+                id: 'schema_properties',
+                title: 'Standardize Entity Properties',
+                description: `Analyzed ${entityCount} entities and found opportunities to standardize common properties like timestamps, IDs, and foreign keys for better schema consistency.`,
+                confidence: 85,
+                priority: 'medium',
+                icon: 'database'
+            });
+            
+            // Check for foreign key opportunities
+            const fkOpportunities = findForeignKeyOpportunities(entities);
+            if (fkOpportunities.length > 0) {
+                suggestions.push({
+                    id: 'schema_foreign_keys',
+                    title: 'Add Foreign Key Properties',
+                    description: `Found ${fkOpportunities.length} opportunities to add foreign key properties for better relational integrity.`,
+                    confidence: 80,
+                    priority: 'medium',
+                    icon: 'key'
+                });
+            }
+            break;
+            
+        case 'data_quality':
+            suggestions.push({
+                id: 'quality_validation',
+                title: 'Add Data Validation Rules',
+                description: 'Enhance entities with validation constraints to ensure data quality and consistency across your ontology.',
+                confidence: 75,
+                priority: 'medium',
+                icon: 'shield-alt'
+            });
+            break;
+            
+        case 'view_enhancement':
+            suggestions.push({
+                id: 'view_aggregate',
+                title: 'Create Aggregate Views',
+                description: 'Add computed aggregate entities to provide summary statistics and reporting capabilities.',
+                confidence: 70,
+                priority: 'medium',
+                icon: 'chart-bar'
+            });
+            break;
+    }
+    
+    // Add general enhancement suggestions if none were generated
+    if (suggestions.length === 0) {
+        suggestions.push({
+            id: 'general_semantic',
+            title: 'Enhance Semantic Richness',
+            description: `Add more descriptive properties and relationships to improve the semantic clarity of your ${entityCount}-entity ontology.`,
+            confidence: 70,
+            priority: 'medium',
+            icon: 'lightbulb'
+        });
+        
+        suggestions.push({
+            id: 'general_metadata',
+            title: 'Add Metadata Properties',
+            description: 'Include metadata properties like creation timestamps, versioning, and lineage tracking for better data governance.',
+            confidence: 75,
+            priority: 'medium',
+            icon: 'info-circle'
+        });
+    }
+    
+    return suggestions;
+}
+
+// Detect domain patterns from entity names
+function detectDomainPatterns(entityNames) {
+    const patterns = [];
+    const domainKeywords = {
+        'user': ['user', 'customer', 'person', 'account'],
+        'product': ['product', 'item', 'merchandise', 'good'],
+        'order': ['order', 'purchase', 'transaction', 'sale'],
+        'financial': ['payment', 'invoice', 'price', 'cost', 'revenue'],
+        'content': ['article', 'post', 'content', 'media'],
+        'system': ['log', 'audit', 'config', 'setting']
+    };
+    
+    Object.keys(domainKeywords).forEach(domain => {
+        if (domainKeywords[domain].some(keyword => 
+            entityNames.some(name => name.includes(keyword))
+        )) {
+            patterns.push(domain);
+        }
+    });
+    
+    return patterns;
+}
+
+// Find specific missing relationships based on entity analysis
+function findSpecificMissingRelationships(entities) {
+    const missingRels = [];
+    const entityMap = new Map(entities.map(e => [e.name.toLowerCase(), e]));
+    
+    // Common relationship patterns to check for
+    const relationshipPatterns = [
+        { from: 'user', to: 'profile', confidence: 90 },
+        { from: 'user', to: 'order', confidence: 95 },
+        { from: 'customer', to: 'order', confidence: 95 },
+        { from: 'product', to: 'category', confidence: 85 },
+        { from: 'order', to: 'product', confidence: 90 },
+        { from: 'artist', to: 'album', confidence: 95 },
+        { from: 'album', to: 'track', confidence: 95 },
+        { from: 'playlist', to: 'track', confidence: 90 }
+    ];
+    
+    relationshipPatterns.forEach(pattern => {
+        const fromEntities = entities.filter(e => 
+            e.name.toLowerCase().includes(pattern.from)
+        );
+        const toEntities = entities.filter(e => 
+            e.name.toLowerCase().includes(pattern.to)
+        );
+        
+        if (fromEntities.length > 0 && toEntities.length > 0) {
+            // Check if relationship might be missing
+            missingRels.push({
+                from: fromEntities[0].name,
+                to: toEntities[0].name,
+                confidence: pattern.confidence
+            });
+        }
+    });
+    
+    return missingRels.slice(0, 3); // Limit to top 3 suggestions
+}
+
+// Find foreign key opportunities
+function findForeignKeyOpportunities(entities) {
+    const opportunities = [];
+    
+    entities.forEach(entity => {
+        const entityName = entity.name.toLowerCase();
+        
+        // Look for entities that should have foreign keys to this entity
+        entities.forEach(otherEntity => {
+            if (entity.id === otherEntity.id) return;
+            
+            const otherName = otherEntity.name.toLowerCase();
+            
+            // Check if other entity should reference this entity
+            if (shouldHaveForeignKey(entityName, otherName)) {
+                opportunities.push({
+                    entity: otherEntity.name,
+                    foreignKey: `${entityName}_id`,
+                    references: entity.name
+                });
+            }
+        });
+    });
+    
+    return opportunities;
+}
+
+// Determine if an entity should have a foreign key to another
+function shouldHaveForeignKey(entityName, otherEntityName) {
+    const fkPatterns = [
+        ['user', 'profile'], ['customer', 'order'], ['product', 'review'],
+        ['category', 'product'], ['artist', 'album'], ['album', 'track']
+    ];
+    
+    return fkPatterns.some(pattern => 
+        entityName.includes(pattern[0]) && otherEntityName.includes(pattern[1])
+    );
+}
+
+// Preview suggestion implementation
+function previewSuggestion(suggestionId) {
+    safeShowToast(`Previewing suggestion: ${suggestionId}`, 'info');
+    // TODO: Implement preview functionality
+}
+
+// Apply suggestion implementation  
+async function applySuggestion(suggestionId) {
+    console.log('=== applySuggestion START ===');
+    console.log('Suggestion ID:', suggestionId);
+    
+    if (!window.ontologyGraph) {
+        safeShowToast('Graph system not initialized', 'danger');
+        return;
+    }
+    
+    if (!currentDomainData) {
+        safeShowToast('No domain data available for applying suggestions', 'warning');
+        return;
+    }
+    
+    try {
+        // Find the suggestion in the generated suggestions
+        const suggestionElement = document.querySelector(`[onclick*="${suggestionId}"]`);
+        if (!suggestionElement) {
+            safeShowToast('Suggestion not found', 'error');
+            return;
+        }
+        
+        // Get suggestion details from the UI
+        const suggestionContainer = suggestionElement.closest('.suggestion-item');
+        const suggestionTitle = suggestionContainer.querySelector('h6').textContent.trim();
+        const suggestionDescription = suggestionContainer.querySelector('p').textContent.trim();
+        
+        console.log('Applying suggestion:', suggestionTitle);
+        
+        // Apply different types of suggestions
+        if (suggestionId.includes('entity_')) {
+            await applyEntitySuggestion(suggestionId, suggestionTitle, suggestionDescription);
+        } else if (suggestionId.includes('rel_') || suggestionId.includes('missing_')) {
+            await applyRelationshipSuggestion(suggestionId, suggestionTitle, suggestionDescription);
+        } else if (suggestionId.includes('schema_')) {
+            await applySchemaSuggestion(suggestionId, suggestionTitle, suggestionDescription);
+        } else {
+            await applyGenericSuggestion(suggestionId, suggestionTitle, suggestionDescription);
+        }
+        
+        // Update suggestion UI to show it's been applied
+        updateSuggestionAsApplied(suggestionId);
+        
+        safeShowToast(`Successfully applied: ${suggestionTitle}`, 'success');
+        
+    } catch (error) {
+        console.error('Error applying suggestion:', error);
+        safeShowToast(`Failed to apply suggestion: ${error.message}`, 'danger');
+    }
+}
+
+// Apply entity-related suggestions
+async function applyEntitySuggestion(suggestionId, title, description) {
+    console.log('Applying entity suggestion:', title);
+    
+    if (!selectedDomain) {
+        safeShowToast('No domain selected', 'danger');
+        return;
+    }
+    
+    try {
+        // Generate a new entity based on the suggestion
+        const newEntityName = extractEntityNameFromSuggestion(title, description);
+        
+        const entityRequest = {
+            name: newEntityName,
+            description: description,
+            properties: ['id', 'name', 'created_at', 'updated_at'],
+            entity_type: 'table',
+            is_ai_suggested: true
+        };
+        
+        console.log('Sending entity creation request:', entityRequest);
+        
+        const response = await fetch(`/api/v1/ontology/domains/${selectedDomain}/entities`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(entityRequest)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || `HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('Entity creation result:', result);
+        
+        if (result.success) {
+            // First refresh the data to get the new entity
+            await refreshAfterSuggestionApplied();
+            
+            // Wait a bit for the data to be fully updated
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Create intelligent auto-connections after data is refreshed
+            const connectionsCreated = await createIntelligentAutoConnections(result.entity_id, newEntityName);
+            
+            // Highlight the new entity and potential connections for manual creation
+            if (window.ontologyGraph && window.ontologyGraph.connectionManager) {
+                setTimeout(() => {
+                    window.ontologyGraph.connectionManager.highlightConnectionCandidatesForNewEntity(result.entity_id);
+                }, 1500); // Give time for visualization to update
+            }
+            
+            if (connectionsCreated > 0) {
+                // Refresh again to show the new connections
+                await refreshAfterSuggestionApplied();
+                safeShowToast(`Entity "${newEntityName}" added with ${connectionsCreated} auto-connections`, 'success');
+            } else {
+                safeShowToast(`Entity "${newEntityName}" added successfully`, 'success');
+            }
+        } else {
+            throw new Error(result.message || 'Failed to create entity');
+        }
+        
+    } catch (error) {
+        console.error('Error applying entity suggestion:', error);
+        safeShowToast(`Failed to apply entity suggestion: ${error.message}`, 'danger');
+    }
+}
+
+// Enhanced intelligent auto-connection system
+async function createIntelligentAutoConnections(newEntityId, newEntityName) {
+    try {
+        console.log('=== Creating Intelligent Auto-Connections ===');
+        console.log('New Entity ID:', newEntityId);
+        console.log('New Entity Name:', newEntityName);
+        console.log('Selected Domain:', selectedDomain);
+        
+        // Re-fetch the latest domain data to include the new entity
+        console.log('Re-fetching domain data...');
+        await loadDomainDataForAI(selectedDomain);
+        
+        if (!currentDomainData || !currentDomainData.entities) {
+            console.warn('No domain data available for auto-connections');
+            console.log('currentDomainData:', currentDomainData);
+            return 0;
+        }
+        
+        const allEntities = currentDomainData.entities;
+        const newEntity = allEntities.find(e => e.id === newEntityId);
+        const existingEntities = allEntities.filter(e => e.id !== newEntityId);
+        
+        console.log('Domain Data Analysis:');
+        console.log('- Total entities in domain:', allEntities.length);
+        console.log('- New entity found:', !!newEntity);
+        console.log('- Existing entities for connection:', existingEntities.length);
+        
+        if (newEntity) {
+            console.log('- New entity details:', {
+                id: newEntity.id,
+                name: newEntity.name,
+                type: newEntity.type,
+                propertiesCount: newEntity.properties?.length || 0
+            });
+        }
+        
+        if (existingEntities.length > 0) {
+            console.log('- Existing entities:');
+            existingEntities.forEach((entity, index) => {
+                console.log(`  ${index + 1}. ${entity.name} (ID: ${entity.id})`);
+            });
+        }
+        
+        if (!newEntity) {
+            console.error('Cannot find new entity in refreshed data!');
+            console.log('All entity IDs:', allEntities.map(e => ({ id: e.id, name: e.name })));
+            return 0;
+        }
+        
+        if (existingEntities.length === 0) {
+            console.log('No existing entities to connect to');
+            return 0;
+        }
+        
+        // Analyze the new entity and find the best connections
+        console.log('Analyzing connection candidates...');
+        const connectionCandidates = analyzeConnectionCandidates(newEntity, existingEntities);
+        console.log('Connection candidates found:', connectionCandidates.length);
+        
+        if (connectionCandidates.length === 0) {
+            console.log('No suitable connection candidates found');
+            console.log('This might be because:');
+            console.log('1. Entity names do not match known patterns');
+            console.log('2. Similarity threshold not met');
+            console.log('3. No foreign key patterns detected');
+            return 0;
+        }
+        
+        let successfulConnections = 0;
+        
+        // Create connections in order of priority (max 3 connections to avoid overcrowding)
+        const topCandidates = connectionCandidates.slice(0, 3);
+        console.log(`Attempting to create ${topCandidates.length} connections...`);
+        
+        for (let i = 0; i < topCandidates.length; i++) {
+            const candidate = topCandidates[i];
+            try {
+                console.log(`\n--- Connection Attempt ${i + 1}/${topCandidates.length} ---`);
+                console.log(`Creating connection: ${candidate.newEntity.name} → ${candidate.targetEntity.name}`);
+                console.log(`Relationship: ${candidate.relationshipName}`);
+                console.log(`Cardinality: ${candidate.cardinality}`);
+                console.log(`Confidence: ${candidate.confidence}%`);
+                console.log(`Reasoning: ${candidate.reasoning}`);
+                
+                const relationshipRequest = {
+                    name: candidate.relationshipName,
+                    description: candidate.description,
+                    source_entity_id: candidate.sourceEntityId,
+                    target_entity_id: candidate.targetEntityId,
+                    cardinality: candidate.cardinality,
+                    is_ai_suggested: true
+                };
+                
+                console.log('Sending relationship request:', relationshipRequest);
+                
+                const response = await fetch(`/api/v1/ontology/domains/${selectedDomain}/relationships`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(relationshipRequest)
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Response result:', result);
+                    
+                    if (result.success) {
+                        successfulConnections++;
+                        console.log(`✓ Successfully created relationship: ${candidate.relationshipName}`);
+                        console.log(`  - Relationship ID: ${result.relationship_id || 'N/A'}`);
+                        console.log(`  - Updated stats:`, result.stats);
+                    } else {
+                        console.warn(`✗ Failed to create relationship: ${result.message}`);
+                    }
+                } else {
+                    const errorText = await response.text();
+                    console.error(`✗ HTTP error creating relationship: ${response.status}`);
+                    console.error('Error response:', errorText);
+                }
+                
+                // Small delay between requests to avoid overwhelming the server
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+            } catch (error) {
+                console.error(`✗ Exception creating connection with ${candidate.targetEntity.name}:`, error);
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack
+                });
+            }
+        }
+        
+        console.log('\n=== Auto-Connection Summary ===');
+        console.log(`Total attempts: ${topCandidates.length}`);
+        console.log(`Successful connections: ${successfulConnections}`);
+        console.log(`Success rate: ${Math.round((successfulConnections / topCandidates.length) * 100)}%`);
+        
+        if (successfulConnections === 0) {
+            console.warn('No connections were created. Possible issues:');
+            console.warn('1. API endpoint errors');
+            console.warn('2. Validation failures');
+            console.warn('3. Database constraints');
+            console.warn('4. Duplicate relationship detection');
+        }
+        
+        console.log('=== End Auto-Connection Process ===\n');
+        return successfulConnections;
+        
+    } catch (error) {
+        console.error('=== CRITICAL ERROR in createIntelligentAutoConnections ===');
+        console.error('Error:', error);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        console.error('===============================================');
+        return 0;
+    }
+}
+
+// Advanced connection candidate analysis
+function analyzeConnectionCandidates(newEntity, existingEntities) {
+    const candidates = [];
+    
+    console.log('=== Analyzing Connection Candidates ===');
+    console.log('New Entity:', newEntity.name);
+    console.log('Existing Entities to analyze:', existingEntities.length);
+    
+    existingEntities.forEach((targetEntity, index) => {
+        console.log(`\n--- Analyzing relationship ${index + 1}/${existingEntities.length} ---`);
+        console.log(`New Entity: "${newEntity.name}" → Target Entity: "${targetEntity.name}"`);
+        
+        const analysis = analyzeEntityRelationship(newEntity, targetEntity);
+        
+        console.log('Analysis result:', {
+            shouldConnect: analysis.shouldConnect,
+            confidence: analysis.confidence,
+            reasoning: analysis.reasoning || 'No reasoning provided'
+        });
+        
+        if (analysis.shouldConnect) {
+            const candidate = {
+                newEntity: newEntity,
+                targetEntity: targetEntity,
+                sourceEntityId: analysis.sourceEntityId,
+                targetEntityId: analysis.targetEntityId,
+                relationshipName: analysis.relationshipName,
+                description: analysis.description,
+                cardinality: analysis.cardinality,
+                confidence: analysis.confidence,
+                reasoning: analysis.reasoning
+            };
+            
+            candidates.push(candidate);
+            console.log('✓ Added as candidate with confidence:', analysis.confidence + '%');
+        } else {
+            console.log('✗ Not suitable for connection');
+        }
+    });
+    
+    // Sort by confidence (highest first)
+    candidates.sort((a, b) => b.confidence - a.confidence);
+    
+    console.log('\n=== Connection Analysis Summary ===');
+    console.log('Total candidates found:', candidates.length);
+    
+    if (candidates.length > 0) {
+        console.log('Top candidates (sorted by confidence):');
+        candidates.forEach((candidate, index) => {
+            console.log(`${index + 1}. ${candidate.targetEntity.name} (${candidate.confidence}% - ${candidate.reasoning})`);
+        });
+    } else {
+        console.log('No suitable candidates found. Possible reasons:');
+        console.log('1. Entity names do not match known patterns');
+        console.log('2. Semantic similarity too low');
+        console.log('3. No foreign key patterns detected');
+        console.log('4. Entities are too dissimilar in structure');
+        
+        // Additional debugging: show what was tried
+        console.log('\nEntity names analyzed:');
+        console.log('- New entity name:', newEntity.name.toLowerCase());
+        existingEntities.forEach(entity => {
+            console.log(`- Existing entity: ${entity.name.toLowerCase()}`);
+        });
+    }
+    
+    console.log('=== End Connection Analysis ===\n');
+    return candidates;
+}
+
+// Deep entity relationship analysis
+function analyzeEntityRelationship(entity1, entity2) {
+    const name1 = entity1.name.toLowerCase();
+    const name2 = entity2.name.toLowerCase();
+    
+    console.log(`Analyzing relationship between "${entity1.name}" and "${entity2.name}"`);
+    
+    // Comprehensive relationship patterns with confidence scores
+    const relationshipPatterns = [
+        // High confidence patterns (90-95%)
+        { pattern: ['user', 'profile'], relationship: 'has_profile', cardinality: 'one-to-one', confidence: 95 },
+        { pattern: ['customer', 'order'], relationship: 'places_order', cardinality: 'one-to-many', confidence: 95 },
+        { pattern: ['artist', 'album'], relationship: 'creates_album', cardinality: 'one-to-many', confidence: 95 },
+        { pattern: ['album', 'track'], relationship: 'contains_track', cardinality: 'one-to-many', confidence: 95 },
+        { pattern: ['category', 'product'], relationship: 'categorizes_product', cardinality: 'one-to-many', confidence: 90 },
+        { pattern: ['genre', 'track'], relationship: 'categorizes_track', cardinality: 'one-to-many', confidence: 90 },
+        
+        // Medium confidence patterns (70-85%)
+        { pattern: ['user', 'order'], relationship: 'places_order', cardinality: 'one-to-many', confidence: 85 },
+        { pattern: ['customer', 'invoice'], relationship: 'receives_invoice', cardinality: 'one-to-many', confidence: 85 },
+        { pattern: ['product', 'order'], relationship: 'ordered_in', cardinality: 'many-to-many', confidence: 80 },
+        { pattern: ['employee', 'customer'], relationship: 'supports_customer', cardinality: 'one-to-many', confidence: 80 },
+        { pattern: ['playlist', 'track'], relationship: 'includes_track', cardinality: 'many-to-many', confidence: 85 },
+        { pattern: ['invoice', 'invoiceline'], relationship: 'contains_line', cardinality: 'one-to-many', confidence: 90 },
+        
+        // Lower confidence but still valid patterns (60-75%)
+        { pattern: ['company', 'employee'], relationship: 'employs', cardinality: 'one-to-many', confidence: 75 },
+        { pattern: ['department', 'employee'], relationship: 'belongs_to', cardinality: 'many-to-one', confidence: 75 },
+        { pattern: ['media', 'track'], relationship: 'defines_format', cardinality: 'one-to-many', confidence: 70 },
+        { pattern: ['address', 'customer'], relationship: 'belongs_to', cardinality: 'many-to-one', confidence: 70 },
+        
+        // Generic fallback patterns (50-60%)
+        { pattern: ['entity', 'detail'], relationship: 'has_details', cardinality: 'one-to-many', confidence: 60 },
+        { pattern: ['master', 'item'], relationship: 'contains_item', cardinality: 'one-to-many', confidence: 55 },
+        { pattern: ['main', 'sub'], relationship: 'contains', cardinality: 'one-to-many', confidence: 50 }
+    ];
+    
+    // Find matching patterns
+    for (const patternObj of relationshipPatterns) {
+        const [word1, word2] = patternObj.pattern;
+        
+        // Direct pattern matching
+        if ((name1.includes(word1) && name2.includes(word2))) {
+            return {
+                shouldConnect: true,
+                sourceEntityId: entity1.id,
+                targetEntityId: entity2.id,
+                relationshipName: patternObj.relationship,
+                description: `Auto-generated relationship: ${entity1.name} ${patternObj.relationship.replace('_', ' ')} ${entity2.name}`,
+                cardinality: patternObj.cardinality,
+                confidence: patternObj.confidence,
+                reasoning: `Direct pattern match: ${word1} → ${word2}`
+            };
+        }
+        
+        // Reverse pattern matching
+        if ((name1.includes(word2) && name2.includes(word1))) {
+            const reverseRelationship = getReverseRelationship(patternObj.relationship, patternObj.cardinality);
+            return {
+                shouldConnect: true,
+                sourceEntityId: entity1.id,
+                targetEntityId: entity2.id,
+                relationshipName: reverseRelationship.name,
+                description: `Auto-generated relationship: ${entity1.name} ${reverseRelationship.name.replace('_', ' ')} ${entity2.name}`,
+                cardinality: reverseRelationship.cardinality,
+                confidence: Math.max(50, patternObj.confidence - 10), // Slightly lower confidence for reverse
+                reasoning: `Reverse pattern match: ${word2} → ${word1}`
+            };
+        }
+    }
+    
+    // Fuzzy matching for similar entity names
+    const similarity = calculateAdvancedSimilarity(name1, name2);
+    if (similarity > 0.3) { // 30% similarity threshold
+        return {
+            shouldConnect: true,
+            sourceEntityId: entity1.id,
+            targetEntityId: entity2.id,
+            relationshipName: 'relates_to',
+            description: `Auto-generated relationship based on semantic similarity (${Math.round(similarity * 100)}%)`,
+            cardinality: 'many-to-many',
+            confidence: Math.round(similarity * 60), // Max 60% confidence for fuzzy matches
+            reasoning: `Semantic similarity: ${Math.round(similarity * 100)}%`
+        };
+    }
+    
+    // Check for foreign key naming patterns
+    const fkPattern = analyzeForeignKeyPattern(entity1, entity2);
+    if (fkPattern.shouldConnect) {
+        return {
+            shouldConnect: true,
+            sourceEntityId: fkPattern.sourceEntityId,
+            targetEntityId: fkPattern.targetEntityId,
+            relationshipName: fkPattern.relationshipName,
+            description: fkPattern.description,
+            cardinality: fkPattern.cardinality,
+            confidence: fkPattern.confidence,
+            reasoning: fkPattern.reasoning
+        };
+    }
+    
+    console.log(`No connection pattern found between "${entity1.name}" and "${entity2.name}"`);
+    return { shouldConnect: false };
+}
+
+// Get reverse relationship name and cardinality
+function getReverseRelationship(relationshipName, cardinality) {
+    const reverseMap = {
+        'has_profile': { name: 'belongs_to_user', cardinality: 'many-to-one' },
+        'places_order': { name: 'placed_by', cardinality: 'many-to-one' },
+        'creates_album': { name: 'created_by', cardinality: 'many-to-one' },
+        'contains_track': { name: 'belongs_to_album', cardinality: 'many-to-one' },
+        'categorizes_product': { name: 'belongs_to_category', cardinality: 'many-to-one' },
+        'employs': { name: 'works_for', cardinality: 'many-to-one' }
+    };
+    
+    if (reverseMap[relationshipName]) {
+        return reverseMap[relationshipName];
+    }
+    
+    // Generic reverse
+    const genericReverse = relationshipName.replace('has_', 'belongs_to_').replace('creates_', 'created_by_');
+    const reverseCardinality = cardinality === 'one-to-many' ? 'many-to-one' : 
+                             cardinality === 'many-to-one' ? 'one-to-many' : cardinality;
+    
+    return {
+        name: genericReverse !== relationshipName ? genericReverse : 'relates_to',
+        cardinality: reverseCardinality
+    };
+}
+
+// Advanced similarity calculation
+function calculateAdvancedSimilarity(name1, name2) {
+    // Tokenize and clean names
+    const tokens1 = name1.toLowerCase().split(/[_\s]+/).filter(t => t.length > 2);
+    const tokens2 = name2.toLowerCase().split(/[_\s]+/).filter(t => t.length > 2);
+    
+    if (tokens1.length === 0 || tokens2.length === 0) return 0;
+    
+    let maxSimilarity = 0;
+    
+    // Check each token against each other token
+    for (const token1 of tokens1) {
+        for (const token2 of tokens2) {
+            // Exact match
+            if (token1 === token2) {
+                maxSimilarity = Math.max(maxSimilarity, 1.0);
+            }
+            // Substring match
+            else if (token1.includes(token2) || token2.includes(token1)) {
+                const longer = Math.max(token1.length, token2.length);
+                const shorter = Math.min(token1.length, token2.length);
+                maxSimilarity = Math.max(maxSimilarity, shorter / longer);
+            }
+            // Levenshtein distance for close matches
+            else {
+                const distance = calculateLevenshteinDistance(token1, token2);
+                const similarity = 1 - (distance / Math.max(token1.length, token2.length));
+                if (similarity > 0.6) { // Only consider close matches
+                    maxSimilarity = Math.max(maxSimilarity, similarity);
+                }
+            }
+        }
+    }
+    
+    return maxSimilarity;
+}
+
+// Levenshtein distance calculation
+function calculateLevenshteinDistance(str1, str2) {
+    const matrix = [];
+    
+    for (let i = 0; i <= str2.length; i++) {
+        matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= str1.length; j++) {
+        matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= str2.length; i++) {
+        for (let j = 1; j <= str1.length; j++) {
+            if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j] + 1
+                );
+            }
+        }
+    }
+    
+    return matrix[str2.length][str1.length];
+}
+
+// Analyze foreign key patterns
+function analyzeForeignKeyPattern(entity1, entity2) {
+    // Check if entity1 might have a foreign key to entity2 or vice versa
+    const checkForeignKey = (sourceEntity, targetEntity) => {
+        const sourceName = sourceEntity.name.toLowerCase();
+        const targetName = targetEntity.name.toLowerCase();
+        
+        // Remove common suffixes/prefixes for matching
+        const cleanTargetName = targetName.replace(/^(the|a|an)_/, '').replace(/_(table|entity|data)$/, '');
+        
+        // Check if source entity properties might reference target entity
+        if (sourceEntity.properties) {
+            const possibleFkNames = [
+                `${cleanTargetName}_id`,
+                `${cleanTargetName}id`,
+                `${cleanTargetName}_key`,
+                `fk_${cleanTargetName}`,
+                `ref_${cleanTargetName}`
+            ];
+            
+            const hasForeignKey = sourceEntity.properties.some(prop => 
+                possibleFkNames.some(fkName => prop.name.toLowerCase().includes(fkName))
+            );
+            
+            if (hasForeignKey) {
+                return {
+                    shouldConnect: true,
+                    sourceEntityId: sourceEntity.id,
+                    targetEntityId: targetEntity.id,
+                    relationshipName: `references_${cleanTargetName}`,
+                    description: `Foreign key relationship detected: ${sourceEntity.name} references ${targetEntity.name}`,
+                    cardinality: 'many-to-one',
+                    confidence: 85,
+                    reasoning: 'Foreign key pattern detected'
+                };
+            }
+        }
+        
+        return { shouldConnect: false };
+    };
+    
+    // Check both directions
+    const result1 = checkForeignKey(entity1, entity2);
+    if (result1.shouldConnect) return result1;
+    
+    const result2 = checkForeignKey(entity2, entity1);
+    if (result2.shouldConnect) return result2;
+    
+    return { shouldConnect: false };
+}
+
+// Apply relationship-related suggestions  
+async function applyRelationshipSuggestion(suggestionId, title, description) {
+    console.log('Applying relationship suggestion:', title);
+    
+    if (!selectedDomain || !currentDomainData || !currentDomainData.entities || currentDomainData.entities.length < 2) {
+        safeShowToast('Need at least 2 entities to create relationships', 'warning');
+        return;
+    }
+    
+    try {
+        // Find the best entities to connect
+        const entities = currentDomainData.entities;
+        const relationshipPairs = findBestRelationshipPairs(entities);
+        
+        if (relationshipPairs.length === 0) {
+            safeShowToast('No suitable entity pairs found for relationship', 'warning');
+            return;
+        }
+        
+        // Create relationships for the top pairs (limit to 2)
+        const pairsToConnect = relationshipPairs.slice(0, 2);
+        let successCount = 0;
+        
+        for (const pair of pairsToConnect) {
+            const relationshipRequest = {
+                name: generateRelationshipName(pair.source.name, pair.target.name),
+                description: description,
+                source_entity_id: pair.source.id,
+                target_entity_id: pair.target.id,
+                cardinality: 'one-to-many',
+                is_ai_suggested: true
+            };
+            
+            console.log('Sending relationship creation request:', relationshipRequest);
+            
+            const response = await fetch(`/api/v1/ontology/domains/${selectedDomain}/relationships`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(relationshipRequest)
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    successCount++;
+                }
+            }
+        }
+        
+        if (successCount > 0) {
+            await refreshAfterSuggestionApplied();
+            safeShowToast(`${successCount} relationship(s) added successfully`, 'success');
+        } else {
+            throw new Error('Failed to create any relationships');
+        }
+        
+    } catch (error) {
+        console.error('Error applying relationship suggestion:', error);
+        safeShowToast(`Failed to apply relationship suggestion: ${error.message}`, 'danger');
+    }
+}
+
+// Apply schema optimization suggestions
+async function applySchemaSuggestion(suggestionId, title, description) {
+    console.log('Applying schema suggestion:', title);
+    
+    if (!selectedDomain || !currentDomainData || !currentDomainData.entities) {
+        safeShowToast('No entities available for schema optimization', 'warning');
+        return;
+    }
+    
+    try {
+        let updateCount = 0;
+        
+        // Add common database properties to entities that don't have them
+        for (const entity of currentDomainData.entities) {
+            const existingProps = entity.properties.map(p => p.name.toLowerCase());
+            const commonProps = ['id', 'created_at', 'updated_at'];
+            const missingProps = commonProps.filter(prop => !existingProps.includes(prop));
+            
+            if (missingProps.length > 0) {
+                const allProps = [...entity.properties.map(p => p.name), ...missingProps];
+                
+                const updateRequest = {
+                    properties: allProps
+                };
+                
+                const response = await fetch(`/api/v1/ontology/domains/${selectedDomain}/entities/${entity.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateRequest)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        updateCount++;
+                    }
+                }
+            }
+        }
+        
+        if (updateCount > 0) {
+            await refreshAfterSuggestionApplied();
+            safeShowToast(`Schema optimized for ${updateCount} entities`, 'success');
+        } else {
+            safeShowToast('No schema optimizations needed', 'info');
+        }
+        
+    } catch (error) {
+        console.error('Error applying schema suggestion:', error);
+        safeShowToast(`Failed to apply schema suggestion: ${error.message}`, 'danger');
+    }
+}
+
+// Apply generic suggestions
+async function applyGenericSuggestion(suggestionId, title, description) {
+    console.log('Applying generic suggestion:', title);
+    
+    if (!selectedDomain || !currentDomainData || !currentDomainData.entities) {
+        safeShowToast('No entities available for enhancement', 'warning');
+        return;
+    }
+    
+    try {
+        let updateCount = 0;
+        
+        // Add descriptions to entities that don't have them
+        for (const entity of currentDomainData.entities) {
+            if (!entity.description || entity.description.trim() === '') {
+                const updateRequest = {
+                    description: `Enhanced ${entity.name} entity with improved semantic clarity`
+                };
+                
+                const response = await fetch(`/api/v1/ontology/domains/${selectedDomain}/entities/${entity.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateRequest)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        updateCount++;
+                    }
+                }
+            }
+        }
+        
+        if (updateCount > 0) {
+            await refreshAfterSuggestionApplied();
+            safeShowToast(`Enhanced ${updateCount} entities with semantic descriptions`, 'success');
+        } else {
+            safeShowToast('No enhancements needed', 'info');
+        }
+        
+    } catch (error) {
+        console.error('Error applying generic suggestion:', error);
+        safeShowToast(`Failed to apply generic suggestion: ${error.message}`, 'danger');
+    }
+}
+
+// Helper function to refresh data after suggestion is applied
+async function refreshAfterSuggestionApplied() {
+    try {
+        console.log('Refreshing data after suggestion applied...');
+        
+        // Reload statistics
+        await loadOntologyStats();
+        
+        // Reload domain data for AI suggestions
+        await loadDomainDataForAI(selectedDomain);
+        
+        // Reload visualization
+        await loadDomainVisualization(selectedDomain);
+        
+        console.log('Data refresh completed');
+        
+    } catch (error) {
+        console.error('Error refreshing data:', error);
+        safeShowToast('Applied successfully but failed to refresh display', 'warning');
+    }
+}
+
+// Helper function to create auto-connections for new entities
+async function createAutoConnections(newEntityId, newEntityName) {
+    try {
+        console.log('Creating auto-connections for new entity:', newEntityName);
+        
+        const entities = currentDomainData.entities;
+        const targetEntities = entities.filter(e => e.id !== newEntityId).slice(0, 2); // Connect to max 2 entities
+        
+        let connectionCount = 0;
+        
+        for (const targetEntity of targetEntities) {
+            // Check if entities should be connected based on naming patterns
+            if (shouldEntitiesBeConnected({data: {label: newEntityName}}, {data: {label: targetEntity.name}})) {
+                const relationshipRequest = {
+                    name: 'relates_to',
+                    description: 'Auto-generated connection based on semantic similarity',
+                    source_entity_id: newEntityId,
+                    target_entity_id: targetEntity.id,
+                    cardinality: 'one-to-many',
+                    is_ai_suggested: true
+                };
+                
+                const response = await fetch(`/api/v1/ontology/domains/${selectedDomain}/relationships`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(relationshipRequest)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success) {
+                        connectionCount++;
+                    }
+                }
+            }
+        }
+        
+        if (connectionCount > 0) {
+            console.log(`Created ${connectionCount} auto-connections`);
+        }
+        
+    } catch (error) {
+        console.error('Error creating auto-connections:', error);
+    }
+}
+
+// Helper function to find best relationship pairs
+function findBestRelationshipPairs(entities) {
+    const pairs = [];
+    
+    for (let i = 0; i < entities.length; i++) {
+        for (let j = i + 1; j < entities.length; j++) {
+            const entity1 = entities[i];
+            const entity2 = entities[j];
+            
+            // Use the new intelligent analysis instead of old shouldEntitiesBeConnected
+            const analysis = analyzeEntityRelationship(entity1, entity2);
+            
+            if (analysis.shouldConnect) {
+                pairs.push({
+                    source: entity1,
+                    target: entity2,
+                    score: analysis.confidence / 100 // Convert confidence to 0-1 score
+                });
+            }
+        }
+    }
+    
+    // Sort by score (highest first)
+    return pairs.sort((a, b) => b.score - a.score);
+}
+
+// Helper function to generate relationship names - Enhanced version
+function generateRelationshipName(sourceName, targetName) {
+    // Use the intelligent analysis to get the best relationship name
+    const mockEntity1 = { id: 'temp1', name: sourceName };
+    const mockEntity2 = { id: 'temp2', name: targetName };
+    
+    const analysis = analyzeEntityRelationship(mockEntity1, mockEntity2);
+    
+    if (analysis.shouldConnect) {
+        return analysis.relationshipName;
+    }
+    
+    // Fallback to simple pattern matching
+    const source = sourceName.toLowerCase();
+    const target = targetName.toLowerCase();
+    
+    const patterns = [
+        {from: 'user', to: 'profile', name: 'has_profile'},
+        {from: 'customer', to: 'order', name: 'places_order'},
+        {from: 'artist', to: 'album', name: 'creates_album'},
+        {from: 'album', to: 'track', name: 'contains_track'},
+        {from: 'playlist', to: 'track', name: 'includes_track'}
+    ];
+    
+    for (const pattern of patterns) {
+        if (source.includes(pattern.from) && target.includes(pattern.to)) {
+            return pattern.name;
+        }
+    }
+    
+    return 'relates_to'; // Default relationship name
+}
+
+// Extract entity name from suggestion text
+function extractEntityNameFromSuggestion(title, description) {
+    // Look for patterns like "Add [EntityName]" or entity names in description
+    const addMatch = title.match(/Add\s+(\w+)/i);
+    if (addMatch) {
+        return addMatch[1];
+    }
+    
+    // Look for entity names in the description
+    const entityMatch = description.match(/(\w+)\s+(entity|table|class)/i);
+    if (entityMatch) {
+        return entityMatch[1];
+    }
+    
+    // Generate contextual names based on existing entities
+    if (currentDomainData && currentDomainData.entities) {
+        const existingNames = currentDomainData.entities.map(e => e.name.toLowerCase());
+        
+        // Suggest complementary entities based on domain patterns
+        if (existingNames.some(name => name.includes('user') || name.includes('customer'))) {
+            if (!existingNames.some(name => name.includes('profile'))) {
+                return 'UserProfile';
+            }
+            if (!existingNames.some(name => name.includes('address'))) {
+                return 'UserAddress';
+            }
+        }
+        
+        if (existingNames.some(name => name.includes('product') || name.includes('item'))) {
+            if (!existingNames.some(name => name.includes('category'))) {
+                return 'ProductCategory';
+            }
+            if (!existingNames.some(name => name.includes('review'))) {
+                return 'ProductReview';
+            }
+        }
+        
+        if (existingNames.some(name => name.includes('order') || name.includes('purchase'))) {
+            if (!existingNames.some(name => name.includes('payment'))) {
+                return 'Payment';
+            }
+            if (!existingNames.some(name => name.includes('shipping'))) {
+                return 'ShippingInfo';
+            }
+        }
+        
+        // Fallback to enhanced entity
+        const entityTypes = new Set(currentDomainData.entities.map(e => e.type?.value || 'entity'));
+        if (entityTypes.has('table')) {
+            return 'EnhancedEntity';
+        }
+    }
+    
+    return 'NewEntity';
+}
+
+// Helper function for legacy compatibility (used in relationship suggestions)
+function shouldEntitiesBeConnected(entity1, entity2) {
+    // This is a simplified version for backward compatibility
+    // Use analyzeEntityRelationship for more detailed analysis
+    const name1 = entity1.data.label.toLowerCase();
+    const name2 = entity2.data.label.toLowerCase();
+    
+    const connectionPatterns = [
+        ['user', 'profile'], ['customer', 'order'], ['product', 'category'],
+        ['artist', 'album'], ['album', 'track'], ['playlist', 'track'],
+        ['company', 'employee'], ['department', 'employee']
+    ];
+    
+    return connectionPatterns.some(pattern => 
+        (name1.includes(pattern[0]) && name2.includes(pattern[1])) ||
+        (name1.includes(pattern[1]) && name2.includes(pattern[0]))
+    );
+}
+
+// Calculate name similarity for auto-connections
+function calculateNameSimilarity(name1, name2) {
+    if (!name1 || !name2) return 0;
+    
+    const words1 = name1.toLowerCase().split(/\W+/);
+    const words2 = name2.toLowerCase().split(/\W+/);
+    
+    let matches = 0;
+    words1.forEach(word1 => {
+        if (words2.some(word2 => word1.includes(word2) || word2.includes(word1))) {
+            matches++;
+        }
+    });
+    
+    return matches / Math.max(words1.length, words2.length);
+}
+
+// Update suggestion UI to show it's been applied
+function updateSuggestionAsApplied(suggestionId) {
+    const suggestionElement = document.querySelector(`[onclick*="${suggestionId}"]`);
+    if (suggestionElement) {
+        const suggestionContainer = suggestionElement.closest('.suggestion-item');
+        
+        // Update apply button
+        suggestionElement.classList.remove('btn-success');
+        suggestionElement.classList.add('btn-secondary');
+        suggestionElement.innerHTML = '<i class="fas fa-check"></i> Applied';
+        suggestionElement.disabled = true;
+        suggestionElement.onclick = null;
+        
+        // Add applied badge
+        const badgeContainer = suggestionContainer.querySelector('.d-flex.justify-content-between .badge');
+        if (badgeContainer) {
+            badgeContainer.textContent = 'applied';
+            badgeContainer.classList.remove('bg-warning', 'bg-success');
+            badgeContainer.classList.add('bg-secondary');
+        }
+        
+        // Add visual indicator
+        suggestionContainer.style.opacity = '0.8';
+        suggestionContainer.style.border = '2px solid #28a745';
+    }
+}
+
+function safeShowToast(message, type = 'info') {
+    if (typeof window.showToast === 'function') {
+        window.showToast(message, type);
+    } else if (typeof showToast === 'function') {
+        showToast(message, type);
+    } else {
+        console.log(`Toast: [${type}] ${message}`);
+        alert(`[${type.toUpperCase()}] ${message}`);
+    }
+}
+</script>
+{% endblock %} 

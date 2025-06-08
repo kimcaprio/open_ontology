@@ -1,0 +1,617 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-folder-open me-2"></i>Data Catalog</h2>
+        <p class="text-muted">Browse and explore your unified data catalog</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="input-group">
+            <input type="text" class="form-control" id="catalog-search" placeholder="Search tables, columns, or descriptions...">
+            <button class="btn btn-outline-primary" type="button" onclick="searchCatalog()">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <button class="btn btn-outline-success me-2" onclick="refreshCatalog()">
+            <i class="fas fa-sync"></i> Refresh
+        </button>
+        <select class="form-select d-inline" id="catalog-filter" style="width: auto;">
+            <option value="">All Types</option>
+            <option value="data_source">Data Sources</option>
+            <option value="database">Databases</option>
+            <option value="table">Tables</option>
+            <option value="column">Columns</option>
+        </select>
+    </div>
+</div>
+
+<!-- Catalog Stats -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <div id="catalog-stats" class="d-flex justify-content-around text-center">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading catalog statistics...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h6 class="mb-0">Catalog Navigation</h6>
+            </div>
+            <div class="card-body catalog-browser">
+                <div id="catalog-tree">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading catalog tree...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Table Details</h6>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" onclick="refreshMetadata()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn btn-sm btn-outline-info" onclick="viewLineage()">
+                        <i class="fas fa-project-diagram"></i> Lineage
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="table-details">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Select a table from the catalog navigation to view its details.
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0">Column Schema</h6>
+            </div>
+            <div class="card-body">
+                <div id="column-schema">
+                    <div class="table-responsive">
+                        <table class="table table-sm metadata-table">
+                            <thead>
+                                <tr>
+                                    <th>Column Name</th>
+                                    <th>Data Type</th>
+                                    <th>Nullable</th>
+                                    <th>Keys</th>
+                                    <th>Description</th>
+                                    <th>Tags</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-3">
+                                        Select a table to view its column schema
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search Results Modal -->
+<div class="modal fade" id="searchResultsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Search Results</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="search-results">
+                    <!-- Search results will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Global variables
+let catalogTree = null;
+let selectedTable = null;
+
+// Catalog specific JavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    loadCatalogData();
+    setupCatalogEventListeners();
+});
+
+function setupCatalogEventListeners() {
+    // Search functionality
+    document.getElementById('catalog-search').addEventListener('input', function(e) {
+        if (e.target.value.length > 2) {
+            debounceSearch(e.target.value);
+        }
+    });
+    
+    // Enter key search
+    document.getElementById('catalog-search').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            searchCatalog();
+        }
+    });
+}
+
+// Debounced search function
+let searchTimeout;
+function debounceSearch(query) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        if (query.length > 2) {
+            performSearch(query);
+        }
+    }, 500);
+}
+
+async function loadCatalogData() {
+    try {
+        // Load catalog stats and tree in parallel
+        const [statsResponse, treeResponse] = await Promise.all([
+            fetch('/api/v1/catalog/stats'),
+            fetch('/api/v1/catalog/tree')
+        ]);
+        
+        if (!statsResponse.ok || !treeResponse.ok) {
+            throw new Error('Failed to load catalog data');
+        }
+        
+        const stats = await statsResponse.json();
+        catalogTree = await treeResponse.json();
+        
+        renderCatalogStats(stats);
+        renderCatalogTree(catalogTree);
+        
+        showToast('Catalog data loaded successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error loading catalog data:', error);
+        document.getElementById('catalog-stats').innerHTML = 
+            '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Error loading catalog data</div>';
+        document.getElementById('catalog-tree').innerHTML = 
+            '<div class="alert alert-danger">Failed to load catalog tree</div>';
+        showToast('Failed to load catalog data: ' + error.message, 'danger');
+    }
+}
+
+function renderCatalogStats(stats) {
+    const statsContainer = document.getElementById('catalog-stats');
+    
+    statsContainer.innerHTML = `
+        <div class="col">
+            <div class="text-center">
+                <h3 class="text-primary">${stats.total_data_sources}</h3>
+                <small class="text-muted">Data Sources</small>
+            </div>
+        </div>
+        <div class="col">
+            <div class="text-center">
+                <h3 class="text-info">${stats.total_databases}</h3>
+                <small class="text-muted">Databases</small>
+            </div>
+        </div>
+        <div class="col">
+            <div class="text-center">
+                <h3 class="text-success">${stats.total_tables}</h3>
+                <small class="text-muted">Tables</small>
+            </div>
+        </div>
+        <div class="col">
+            <div class="text-center">
+                <h3 class="text-warning">${stats.total_columns}</h3>
+                <small class="text-muted">Columns</small>
+            </div>
+        </div>
+        <div class="col">
+            <div class="text-center">
+                <h3 class="text-secondary">${stats.total_rows.toLocaleString()}</h3>
+                <small class="text-muted">Total Rows</small>
+            </div>
+        </div>
+    `;
+}
+
+function renderCatalogTree(catalogData) {
+    const tree = document.getElementById('catalog-tree');
+    
+    if (!catalogData.data_sources || catalogData.data_sources.length === 0) {
+        tree.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-database fa-3x text-muted mb-3"></i>
+                <p>No data sources found.</p>
+                <p>Add data sources to see them in the catalog.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    
+    catalogData.data_sources.forEach(dataSource => {
+        html += `
+            <div class="catalog-node">
+                <div class="d-flex justify-content-between align-items-center catalog-item" onclick="toggleDataSource('${dataSource.id}')">
+                    <span>
+                        <i class="fas fa-database text-primary me-2"></i>
+                        <strong>${dataSource.name}</strong>
+                    </span>
+                    <span class="badge bg-${dataSource.connection_status === 'healthy' ? 'success' : 'danger'}">${dataSource.connection_status}</span>
+                </div>
+                <div id="datasource-${dataSource.id}" style="display: none;" class="ms-3 mt-2">
+        `;
+        
+        dataSource.databases.forEach(database => {
+            html += `
+                <div class="catalog-node">
+                    <div class="catalog-item" onclick="toggleDatabase('${dataSource.id}', '${database.name}')">
+                        <i class="fas fa-folder text-info me-2"></i>
+                        ${database.name}
+                        <small class="text-muted">(${database.table_count} tables)</small>
+                    </div>
+                    <div id="database-${dataSource.id}-${database.name}" style="display: none;" class="ms-3 mt-1">
+            `;
+            
+            database.tables.forEach(table => {
+                html += `
+                    <div class="catalog-table-item" onclick="selectTable('${dataSource.id}', '${database.name}', '${table.name}')">
+                        <i class="fas fa-table text-success me-2"></i>
+                        ${table.name}
+                        <small class="text-muted">(${table.column_count} cols, ${table.row_count ? table.row_count.toLocaleString() : '?'} rows)</small>
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    });
+    
+    tree.innerHTML = html;
+}
+
+function toggleDataSource(dataSourceId) {
+    const element = document.getElementById(`datasource-${dataSourceId}`);
+    if (element.style.display === 'none') {
+        element.style.display = 'block';
+    } else {
+        element.style.display = 'none';
+    }
+}
+
+function toggleDatabase(dataSourceId, databaseName) {
+    const element = document.getElementById(`database-${dataSourceId}-${databaseName}`);
+    if (element.style.display === 'none') {
+        element.style.display = 'block';
+    } else {
+        element.style.display = 'none';
+    }
+}
+
+async function selectTable(dataSourceId, databaseName, tableName) {
+    try {
+        selectedTable = { dataSourceId, databaseName, tableName };
+        
+        // Highlight selected table
+        document.querySelectorAll('.catalog-table-item').forEach(item => {
+            item.classList.remove('bg-primary', 'text-white');
+        });
+        event.target.closest('.catalog-table-item').classList.add('bg-primary', 'text-white');
+        
+        // Load table details
+        const response = await fetch(`/api/v1/catalog/tables/${dataSourceId}/${databaseName}/${tableName}`);
+        if (!response.ok) {
+            throw new Error('Failed to load table details');
+        }
+        
+        const table = await response.json();
+        renderTableDetails(table);
+        
+    } catch (error) {
+        console.error('Error loading table details:', error);
+        showToast('Failed to load table details: ' + error.message, 'danger');
+    }
+}
+
+function renderTableDetails(table) {
+    const detailsContainer = document.getElementById('table-details');
+    const schemaContainer = document.getElementById('column-schema');
+    
+    // Render table details
+    detailsContainer.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h5>${table.name}</h5>
+                <p class="text-muted">${table.description || 'No description available'}</p>
+                <div class="mt-2">
+                    ${table.tags.map(tag => `<span class="badge bg-secondary me-1">${tag}</span>`).join('')}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Database:</strong> ${table.database_name}<br>
+                        <strong>Columns:</strong> ${table.column_count}<br>
+                    </div>
+                    <div class="col-6">
+                        <strong>Rows:</strong> ${table.row_count ? table.row_count.toLocaleString() : 'Unknown'}<br>
+                        <strong>Full Name:</strong> ${table.full_name}<br>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <strong>Last Scanned:</strong> ${table.last_scanned_at ? new Date(table.last_scanned_at).toLocaleString() : 'Never'}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Render column schema
+    if (table.columns && table.columns.length > 0) {
+        const columnRows = table.columns.map(col => `
+            <tr>
+                <td><code>${col.name}</code></td>
+                <td><span class="badge bg-secondary">${col.data_type}</span></td>
+                <td>${col.nullable ? '<i class="fas fa-check text-success"></i>' : '<i class="fas fa-times text-danger"></i>'}</td>
+                <td>
+                    ${col.primary_key ? '<span class="badge bg-warning me-1">PK</span>' : ''}
+                    ${col.foreign_key ? '<span class="badge bg-info me-1">FK</span>' : ''}
+                </td>
+                <td>${col.description || '-'}</td>
+                <td>
+                    ${col.tags.map(tag => `<span class="badge bg-primary me-1">${tag}</span>`).join('')}
+                </td>
+            </tr>
+        `).join('');
+        
+        schemaContainer.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-sm metadata-table">
+                    <thead>
+                        <tr>
+                            <th>Column Name</th>
+                            <th>Data Type</th>
+                            <th>Nullable</th>
+                            <th>Keys</th>
+                            <th>Description</th>
+                            <th>Tags</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${columnRows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } else {
+        schemaContainer.innerHTML = `
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                No column information available for this table.
+            </div>
+        `;
+    }
+}
+
+async function searchCatalog() {
+    const query = document.getElementById('catalog-search').value.trim();
+    const filter = document.getElementById('catalog-filter').value;
+    
+    if (!query || query.length < 2) {
+        showToast('Please enter at least 2 characters to search', 'warning');
+        return;
+    }
+    
+    await performSearch(query, filter);
+}
+
+async function performSearch(query, filter = '') {
+    try {
+        let url = `/api/v1/catalog/search?q=${encodeURIComponent(query)}`;
+        if (filter) {
+            url += `&types=${filter}`;
+        }
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('Search failed');
+        }
+        
+        const results = await response.json();
+        renderSearchResults(results, query);
+        
+        // Show modal if results found
+        if (results.length > 0) {
+            const modal = new bootstrap.Modal(document.getElementById('searchResultsModal'));
+            modal.show();
+        } else {
+            showToast('No results found', 'info');
+        }
+        
+    } catch (error) {
+        console.error('Search error:', error);
+        showToast('Search failed: ' + error.message, 'danger');
+    }
+}
+
+function renderSearchResults(results, query) {
+    const container = document.getElementById('search-results');
+    
+    if (results.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <p>No results found for "${query}"</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const groupedResults = {};
+    results.forEach(result => {
+        if (!groupedResults[result.item_type]) {
+            groupedResults[result.item_type] = [];
+        }
+        groupedResults[result.item_type].push(result);
+    });
+    
+    let html = `<p class="text-muted mb-3">Found ${results.length} results for "${query}"</p>`;
+    
+    Object.keys(groupedResults).forEach(type => {
+        const typeResults = groupedResults[type];
+        html += `
+            <h6 class="text-primary">${type.toUpperCase().replace('_', ' ')} (${typeResults.length})</h6>
+            <div class="list-group mb-3">
+        `;
+        
+        typeResults.forEach(result => {
+            html += `
+                <div class="list-group-item list-group-item-action">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">${result.name}</h6>
+                        <small class="text-muted">Score: ${(result.relevance_score * 100).toFixed(0)}%</small>
+                    </div>
+                    <p class="mb-1 text-muted">${result.full_name}</p>
+                    <small>${result.description || 'No description'}</small>
+                    <div class="mt-1">
+                        ${result.tags.map(tag => `<span class="badge bg-secondary me-1">${tag}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+    });
+    
+    container.innerHTML = html;
+}
+
+async function refreshCatalog() {
+    try {
+        showToast('Refreshing catalog...', 'info');
+        
+        const response = await fetch('/api/v1/catalog/refresh', {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Refresh failed');
+        }
+        
+        const result = await response.json();
+        
+        showToast('Catalog refreshed successfully!', 'success');
+        
+        // Reload the page data
+        await loadCatalogData();
+        
+    } catch (error) {
+        console.error('Refresh error:', error);
+        showToast('Failed to refresh catalog: ' + error.message, 'danger');
+    }
+}
+
+function refreshMetadata() {
+    if (!selectedTable) {
+        showToast('Please select a table first', 'warning');
+        return;
+    }
+    
+    // Reload the selected table
+    selectTable(selectedTable.dataSourceId, selectedTable.databaseName, selectedTable.tableName);
+}
+
+function viewLineage() {
+    if (!selectedTable) {
+        showToast('Please select a table first', 'warning');
+        return;
+    }
+    
+    showToast('Lineage visualization coming soon!', 'info');
+}
+</script>
+
+<style>
+.catalog-browser {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.catalog-node {
+    margin-bottom: 8px;
+}
+
+.catalog-item {
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.catalog-item:hover {
+    background-color: #f8f9fa;
+}
+
+.catalog-table-item {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 3px;
+    transition: all 0.2s;
+    margin-bottom: 2px;
+}
+
+.catalog-table-item:hover {
+    background-color: #e9ecef;
+}
+
+.metadata-table {
+    font-size: 0.9em;
+}
+
+.metadata-table code {
+    font-size: 0.85em;
+}
+</style>
+{% endblock %} 

@@ -1,0 +1,117 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# AI Suggestions System Guide
+
+## 🤖 AI-Powered Ontology Enhancement
+
+### System Overview
+The AI Suggestions system automatically analyzes ontology domains and provides intelligent recommendations for entities, relationships, and schema improvements.
+
+### Key Components
+
+#### Suggestion Generation
+- **Context Analysis**: Analyzes existing entities and relationships
+- **Pattern Recognition**: Identifies common ontology patterns
+- **Gap Detection**: Finds missing entities or relationships
+- **Schema Optimization**: Suggests property improvements
+
+#### Frontend Integration in [src/web/templates/ontology.html](mdc:src/web/templates/ontology.html)
+```javascript
+// Apply entity suggestion with auto-highlighting
+async function applyEntitySuggestion(suggestionId, title, description) {
+    // 1. Create entity via API
+    // 2. Refresh visualization data
+    // 3. Auto-highlight new entity and connection candidates
+    // 4. Create intelligent auto-connections
+}
+```
+
+#### Auto-Connection Intelligence
+```javascript
+// Entity relationship analysis patterns
+const relationshipPatterns = [
+    // High confidence (90-95%)
+    { pattern: ['user', 'profile'], relationship: 'has_profile', confidence: 95 },
+    { pattern: ['customer', 'order'], relationship: 'places_order', confidence: 95 },
+    
+    // Medium confidence (70-85%)
+    { pattern: ['product', 'order'], relationship: 'ordered_in', confidence: 80 },
+    
+    // Lower confidence (60-75%)
+    { pattern: ['company', 'employee'], relationship: 'employs', confidence: 75 }
+];
+```
+
+### Suggestion Types
+
+#### 1. Entity Suggestions
+- **Purpose**: Add missing domain entities
+- **Trigger**: When entity count is low or gaps detected
+- **Auto-actions**: Position calculation, property generation, connection analysis
+
+#### 2. Relationship Suggestions  
+- **Purpose**: Connect isolated entities
+- **Trigger**: When entities > relationships + 2
+- **Auto-actions**: Intelligent relationship naming, cardinality mapping
+
+#### 3. Schema Suggestions
+- **Purpose**: Optimize entity properties
+- **Trigger**: Table-type entities with minimal properties
+- **Auto-actions**: Add common database fields (id, timestamps, etc.)
+
+### Connection Candidate Analysis
+
+#### Confidence Scoring
+```javascript
+// Intelligent relationship analysis
+function analyzeEntityRelationship(entity1, entity2) {
+    // 1. Direct pattern matching (95% confidence)
+    // 2. Reverse pattern matching (85% confidence) 
+    // 3. Fuzzy semantic matching (60% confidence)
+    // 4. Return shouldConnect + confidence + reasoning
+}
+```
+
+#### Auto-Highlighting System
+- **New Entity**: Red dashed border with pulsing animation
+- **High Confidence**: Green highlight (80%+ confidence)
+- **Medium Confidence**: Yellow highlight (60-79% confidence)  
+- **Low Confidence**: Blue highlight (50-59% confidence)
+
+### Integration Workflow
+
+#### Suggestion Application Flow
+1. **Generate**: AI analyzes domain and creates suggestions
+2. **Display**: Show suggestions in categorized panels
+3. **Apply**: User clicks to apply suggestion
+4. **Create**: API creates entity/relationship
+5. **Highlight**: Auto-highlight new entity and candidates
+6. **Connect**: Create intelligent auto-connections
+7. **Refresh**: Update visualization and statistics
+
+#### API Integration Pattern
+```javascript
+// Always validate selected domain
+if (!selectedDomain) {
+    console.warn('No domain selected');
+    return;
+}
+
+// Create with proper error handling
+const response = await fetch(`/api/v1/ontology/domains/${selectedDomain}/entities`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entityRequest)
+});
+```
+
+## 🎯 Development Guidelines
+- Maintain confidence thresholds (50% minimum for suggestions)
+- Log all suggestion applications for analysis
+- Provide clear reasoning for each suggestion
+- Auto-clear highlights after 10 seconds
+- Update domain statistics after changes
+- Test with various domain types (user/customer/product domains)

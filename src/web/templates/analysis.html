@@ -1,0 +1,2071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    
+    <!-- CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/material.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    
+    <style>
+        .analysis-container {
+            display: flex;
+            height: calc(100vh - 120px);
+            margin-top: 20px;
+            margin-bottom: 60px;
+        }
+        
+        .catalog-sidebar {
+            width: 300px;
+            background: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            min-height: calc(100vh - 140px);
+        }
+        
+        .query-editor {
+            height: 300px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        
+        .results-panel {
+            flex: 1;
+            margin-top: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            overflow: visible;
+            min-height: 500px;
+            scroll-margin-top: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .results-table {
+            max-height: 400px;
+            overflow: auto;
+        }
+        
+        .catalog-tree .catalog-item {
+            margin-bottom: 10px;
+        }
+        
+        .catalog-tree .catalog-header {
+            background: #007bff;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+        
+        .catalog-tree .schema-item {
+            margin-left: 15px;
+            margin-bottom: 5px;
+        }
+        
+        .catalog-tree .schema-header {
+            background: #6c757d;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        
+        .catalog-tree .table-item {
+            margin-left: 30px;
+            padding: 4px 8px;
+            background: #e9ecef;
+            margin-bottom: 2px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.85em;
+        }
+        
+        .catalog-tree .table-item:hover {
+            background: #dee2e6;
+        }
+        
+        .query-actions {
+            margin-bottom: 15px;
+        }
+        
+        .sample-queries {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .sample-query-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        
+        .sample-query-item:hover {
+            background: #f1f3f4;
+        }
+        
+        .query-stats {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-top: 10px;
+        }
+        
+        .cross-catalog-examples {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .CodeMirror {
+            font-family: 'Monaco', 'Consolas', monospace;
+            height: 300px;
+        }
+
+        /* New styles for visualization and NL query */
+        .nl-query-panel {
+            background: #e8f5e8;
+            border: 1px solid #b6d7b6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .chat-interface {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .chat-input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        .voice-button {
+            border: none;
+            background: #28a745;
+            color: white;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .voice-button:hover {
+            background: #218838;
+            transform: scale(1.05);
+        }
+
+        .voice-button.recording {
+            background: #dc3545;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .results-tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .results-tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            color: #6c757d;
+            font-weight: 500;
+            transition: all 0.2s ease-in-out;
+            flex: 1;
+            text-align: center;
+        }
+
+        .results-tab:hover {
+            color: #007bff;
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+
+        .results-tab.active {
+            color: #007bff;
+            border-bottom-color: #007bff;
+            background: white;
+            font-weight: 600;
+        }
+
+        .visualization-container {
+            min-height: 500px;
+            padding: 30px 20px;
+            position: relative;
+            margin-bottom: 50px;
+            overflow: visible;
+        }
+
+        #chart-results-content {
+            padding-bottom: 80px;
+            min-height: 600px;
+            overflow: visible;
+        }
+        
+        #chart-container {
+            min-height: 500px;
+            height: auto;
+            width: calc(100% - 20px);
+            max-width: 100%;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: white;
+            position: relative;
+            overflow: visible;
+            margin: 20px 10px 40px 10px;
+            padding: 15px;
+            box-sizing: border-box;
+        }
+        
+        #chart-container .plotly-graph-div {
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 420px !important;
+        }
+        
+        #table-results-content {
+            padding: 20px;
+            max-height: none;
+            overflow-x: auto;
+        }
+
+        .llm-model-selector {
+            background: #f0f4f8;
+            border: 1px solid #c5d1e0;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .model-selector-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .model-selector {
+            min-width: 200px;
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: white;
+            font-size: 14px;
+        }
+
+        .model-info {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .provider-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .provider-openai { background: #10a37f; color: white; }
+        .provider-anthropic { background: #c17b4e; color: white; }
+        .provider-aws_bedrock { background: #ff9900; color: white; }
+        .provider-google { background: #4285f4; color: white; }
+        .provider-cohere { background: #1b365b; color: white; }
+        .provider-ollama { background: #6366f1; color: white; }
+        .provider-vllm { background: #8b5cf6; color: white; }
+
+        .model-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-available { background: #28a745; }
+        .status-unavailable { background: #dc3545; }
+
+        .chart-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+
+        .chart-recommendation {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .visualization-container {
+            min-height: 500px;
+            padding: 30px 20px;
+            position: relative;
+            margin-bottom: 50px;
+            overflow: visible;
+        }
+
+        /* Custom styles for Ontology Platform */
+
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            padding-bottom: 80px;
+            scroll-behavior: smooth;
+        }
+
+        .container-fluid {
+            padding-bottom: 60px;
+        }
+
+        .analysis-container {
+            margin-bottom: 60px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-database me-2"></i>
+                Ontology Platform
+            </a>
+            
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/">
+                    <i class="fas fa-home me-1"></i>Home
+                </a>
+                <a class="nav-link" href="/datasources">
+                    <i class="fas fa-plug me-1"></i>Data Sources
+                </a>
+                <a class="nav-link" href="/catalog">
+                    <i class="fas fa-folder me-1"></i>Catalog
+                </a>
+                <a class="nav-link" href="/ontology">
+                    <i class="fas fa-sitemap me-1"></i>Ontology
+                </a>
+                <a class="nav-link active" href="/analysis">
+                    <i class="fas fa-search me-1"></i>Analysis
+                </a>
+                <a class="nav-link" href="/activity-logs">
+                    <i class="fas fa-list me-1"></i>Activity Logs
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="page-title">
+                    <i class="fas fa-search me-2"></i>
+                    SQL Analysis
+                    <small class="text-muted">- Trino MPP Engine</small>
+                </h1>
+                <p class="lead">Query and analyze data across multiple heterogeneous databases using Trino distributed SQL engine.</p>
+            </div>
+        </div>
+
+        <div class="analysis-container">
+            <!-- Catalog Sidebar -->
+            <div class="catalog-sidebar">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5><i class="fas fa-database me-2"></i>Data Catalog</h5>
+                    <button class="btn btn-sm btn-outline-primary" onclick="refreshCatalog()">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                
+                <div id="catalog-stats" class="alert alert-info small mb-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Loading catalog data...
+                </div>
+                
+                <div id="catalog-tree" class="catalog-tree">
+                    <!-- Catalog tree will be populated here -->
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Natural Language Query Panel -->
+                <div class="nl-query-panel">
+                    <h6><i class="fas fa-comments me-2"></i>Natural Language Query</h6>
+                    <p class="small mb-3">Ask questions about your data in plain English. Use voice input or type your query.</p>
+                    
+                    <div class="chat-interface">
+                        <div class="chat-input-group">
+                            <input 
+                                type="text" 
+                                class="chat-input" 
+                                id="nl-query-input" 
+                                placeholder="e.g., 'Show me the top 10 customers by sales' or 'How many employees are in each department?'"
+                                onkeypress="handleNLQueryKeyPress(event)"
+                            >
+                            <button class="voice-button" id="voice-button" onclick="toggleVoiceInput()" title="Click and speak">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                            <button class="btn btn-success" onclick="executeNaturalLanguageQuery()">
+                                <i class="fas fa-magic me-1"></i>Ask AI
+                            </button>
+                        </div>
+                        
+                        <div id="nl-query-status" class="small text-muted mt-2" style="display: none;">
+                            <!-- Status messages will appear here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LLM Model Selector -->
+                <div class="llm-model-selector">
+                    <h6><i class="fas fa-brain me-2"></i>AI Model Configuration</h6>
+                    <p class="small mb-3">Select the LLM model for natural language processing and visualization recommendations.</p>
+                    
+                    <div class="model-selector-group">
+                        <div>
+                            <label for="model-selector" class="form-label small fw-bold">Active Model:</label>
+                            <select class="model-selector" id="model-selector" onchange="changeModel()">
+                                <option value="">Loading models...</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label for="provider-filter" class="form-label small fw-bold">Filter by Provider:</label>
+                            <select class="model-selector" id="provider-filter" onchange="filterModelsByProvider()">
+                                <option value="all">All Providers</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="anthropic">Anthropic</option>
+                                <option value="aws_bedrock">AWS Bedrock</option>
+                                <option value="google">Google</option>
+                                <option value="cohere">Cohere</option>
+                                <option value="ollama">Ollama (Local)</option>
+                                <option value="vllm">vLLM (Custom)</option>
+                            </select>
+                        </div>
+                        
+                        <button class="btn btn-sm btn-outline-primary" onclick="refreshModels()">
+                            <i class="fas fa-sync-alt me-1"></i>Refresh All Models
+                        </button>
+                    </div>
+                    
+                    <div class="model-status">
+                        <span class="small fw-bold">Status:</span>
+                        <div class="status-indicator" id="model-status-indicator"></div>
+                        <span class="small" id="model-status-text">Loading...</span>
+                    </div>
+                    
+                    <div class="model-info" id="model-info">
+                        <!-- Model information will be displayed here -->
+                    </div>
+                </div>
+
+                <!-- Cross-Catalog Examples -->
+                <div class="cross-catalog-examples">
+                    <h6><i class="fas fa-lightbulb me-2"></i>Cross-Catalog Query Examples</h6>
+                    <p class="small mb-2">Click an example to load it into the query editor:</p>
+                    <div id="cross-catalog-examples-list">
+                        <!-- Examples will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Sample Queries Panel -->
+                <div id="sample-queries-panel" class="sample-queries" style="display: none;">
+                    <h6><i class="fas fa-code me-2"></i>Sample Queries for <span id="selected-table-name"></span></h6>
+                    <div id="sample-queries-list">
+                        <!-- Sample queries will be populated here -->
+                    </div>
+                </div>
+
+                <!-- Query Actions -->
+                <div class="query-actions">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-primary" onclick="executeSQL()">
+                                    <i class="fas fa-play me-2"></i>Execute SQL
+                                </button>
+                                <button type="button" class="btn btn-success" onclick="executeQuery()">
+                                    <i class="fas fa-cogs me-2"></i>Run with Trino
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="clearQuery()">
+                                    <i class="fas fa-eraser me-2"></i>Clear
+                                </button>
+                                <button type="button" class="btn btn-info" onclick="formatQuery()">
+                                    <i class="fas fa-magic me-2"></i>Format
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <small class="text-muted">
+                                <i class="fas fa-keyboard me-1"></i>
+                                Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to execute SQL
+                                <br>
+                                <i class="fas fa-info-circle me-1"></i>
+                                SQL execution includes auto-visualization
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <!-- Query Status -->
+                    <div id="query-status" class="small mt-2" style="display: none;">
+                        <!-- Status messages will appear here -->
+                    </div>
+                </div>
+
+                <!-- Query Editor -->
+                <div class="query-editor-container">
+                    <textarea id="query-editor" placeholder="-- Enter your SQL query here...
+-- Example: SELECT department_name, COUNT(*) as employee_count 
+--          FROM employees e JOIN departments d ON e.department_id = d.id 
+--          GROUP BY department_name ORDER BY employee_count DESC;
+--
+-- Press Ctrl+Enter to execute with visualization
+-- Use 'Execute SQL' for quick execution with demo data"></textarea>
+                </div>
+
+                <!-- Query Results Section -->
+                <div id="query-results" style="display: none;">
+                    <!-- Results will be populated by displayQueryResults() function -->
+                </div>
+
+                <!-- Results Panel -->
+                <div class="results-panel">
+                    <!-- Results Tabs -->
+                    <div class="results-tabs">
+                        <button class="results-tab active" onclick="switchResultsTab('table')" id="table-tab">
+                            <i class="fas fa-table me-2"></i>Table View
+                        </button>
+                        <button class="results-tab" onclick="switchResultsTab('chart')" id="chart-tab">
+                            <i class="fas fa-chart-bar me-2"></i>Visualization
+                        </button>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
+                        <h6 class="mb-0">
+                            <i class="fas fa-table me-2"></i>Query Results
+                        </h6>
+                        <div id="query-stats" class="query-stats">
+                            Ready to execute query
+                        </div>
+                    </div>
+                    
+                    <!-- Table Results Content -->
+                    <div id="table-results-content" class="p-3">
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-play-circle fa-3x mb-3"></i>
+                            <p>Run a query to see results here</p>
+                        </div>
+                    </div>
+
+                    <!-- Visualization Results Content -->
+                    <div id="chart-results-content" class="visualization-container" style="display: none;">
+                        <div id="chart-recommendation" class="chart-recommendation" style="display: none;">
+                            <h6><i class="fas fa-lightbulb me-2"></i>AI Visualization Recommendation</h6>
+                            <div id="recommendation-text"></div>
+                        </div>
+                        
+                        <div class="chart-controls" id="chart-controls" style="display: none;">
+                            <div>
+                                <label class="form-label small">Chart Type:</label>
+                                <select class="form-select form-select-sm" id="chart-type-selector" onchange="updateVisualization()">
+                                    <option value="table">Table</option>
+                                    <option value="bar">Bar Chart</option>
+                                    <option value="line">Line Chart</option>
+                                    <option value="pie">Pie Chart</option>
+                                    <option value="scatter">Scatter Plot</option>
+                                    <option value="histogram">Histogram</option>
+                                    <option value="box">Box Plot</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary" onclick="refreshVisualization()">
+                                <i class="fas fa-sync-alt me-1"></i>Refresh Chart
+                            </button>
+                        </div>
+
+                        <div id="chart-container">
+                            <div class="text-center text-muted py-5">
+                                <i class="fas fa-chart-bar fa-3x mb-3"></i>
+                                <p>Execute a query to see AI-powered visualization recommendations</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/sql/sql.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+
+    <script>
+        let queryEditor;
+        let currentCatalogData = null;
+        let currentQueryResult = null;
+        let currentVisualization = null;
+        let recognition = null;
+        let isRecording = false;
+
+        // Initialize CodeMirror and Speech Recognition
+        document.addEventListener('DOMContentLoaded', function() {
+            queryEditor = CodeMirror.fromTextArea(document.getElementById('query-editor'), {
+                lineNumbers: true,
+                mode: 'sql',
+                theme: 'material',
+                autoCloseBrackets: true,
+                matchBrackets: true,
+                indentUnit: 2,
+                lineWrapping: true
+            });
+
+            // Add keyboard shortcut for SQL execution
+            queryEditor.on('keydown', function(cm, event) {
+                handleSQLKeyPress(event);
+            });
+
+            loadCatalogData();
+            loadCrossCatalogExamples();
+            initializeSpeechRecognition();
+            loadLLMModels();
+        });
+
+        // Load catalog data
+        async function loadCatalogData() {
+            try {
+                const response = await fetch('/api/v1/analysis/catalog');
+                const data = await response.json();
+                currentCatalogData = data;
+                
+                updateCatalogStats(data);
+                renderCatalogTree(data.catalogs);
+                
+            } catch (error) {
+                console.error('Error loading catalog data:', error);
+                document.getElementById('catalog-stats').innerHTML = 
+                    '<i class="fas fa-exclamation-triangle me-2"></i>Error loading catalog data';
+            }
+        }
+
+        // Update catalog statistics
+        function updateCatalogStats(data) {
+            document.getElementById('catalog-stats').innerHTML = `
+                <i class="fas fa-database me-2"></i>
+                ${data.total_catalogs} catalogs, ${data.total_schemas} schemas, ${data.total_tables} tables
+            `;
+        }
+
+        // Render catalog tree
+        function renderCatalogTree(catalogs) {
+            const tree = document.getElementById('catalog-tree');
+            tree.innerHTML = '';
+
+            catalogs.forEach(catalog => {
+                const catalogDiv = document.createElement('div');
+                catalogDiv.className = 'catalog-item';
+                
+                catalogDiv.innerHTML = `
+                    <div class="catalog-header" onclick="toggleCatalog('${catalog.name}')">
+                        <i class="fas fa-database me-2"></i>
+                        ${catalog.name}
+                        <small class="float-end">(${catalog.schemas.length})</small>
+                    </div>
+                    <div id="catalog-${catalog.name}" style="display: none;">
+                        ${catalog.schemas.map(schema => `
+                            <div class="schema-item">
+                                <div class="schema-header" onclick="toggleSchema('${catalog.name}', '${schema}')">
+                                    <i class="fas fa-folder me-2"></i>
+                                    ${schema}
+                                </div>
+                                <div id="schema-${catalog.name}-${schema}" style="display: none;">
+                                    <!-- Tables will be loaded here -->
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                tree.appendChild(catalogDiv);
+            });
+        }
+
+        // Toggle catalog visibility
+        function toggleCatalog(catalogName) {
+            const element = document.getElementById(`catalog-${catalogName}`);
+            if (element.style.display === 'none') {
+                element.style.display = 'block';
+            } else {
+                element.style.display = 'none';
+            }
+        }
+
+        // Toggle schema visibility and load tables
+        async function toggleSchema(catalogName, schemaName) {
+            const element = document.getElementById(`schema-${catalogName}-${schemaName}`);
+            
+            if (element.style.display === 'none') {
+                // Load tables if not already loaded
+                if (element.innerHTML.trim() === '<!-- Tables will be loaded here -->') {
+                    await loadTables(catalogName, schemaName);
+                }
+                element.style.display = 'block';
+            } else {
+                element.style.display = 'none';
+            }
+        }
+
+        // Load tables for a schema
+        async function loadTables(catalogName, schemaName) {
+            try {
+                const response = await fetch(`/api/v1/analysis/catalogs/${catalogName}/schemas/${schemaName}/tables`);
+                const tables = await response.json();
+                
+                const element = document.getElementById(`schema-${catalogName}-${schemaName}`);
+                element.innerHTML = tables.map(table => `
+                    <div class="table-item" onclick="selectTable('${catalogName}', '${schemaName}', '${table.name}')">
+                        <i class="fas fa-table me-2"></i>
+                        ${table.name}
+                        <small class="text-muted">(${table.columns.length} cols)</small>
+                    </div>
+                `).join('');
+                
+            } catch (error) {
+                console.error('Error loading tables:', error);
+            }
+        }
+
+        // Select a table and generate sample queries
+        async function selectTable(catalogName, schemaName, tableName) {
+            try {
+                // Highlight selected table
+                document.querySelectorAll('.table-item').forEach(item => {
+                    item.classList.remove('bg-primary', 'text-white');
+                });
+                event.target.classList.add('bg-primary', 'text-white');
+
+                // Generate sample queries
+                const response = await fetch('/api/v1/analysis/sample-queries', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        catalog: catalogName,
+                        schema: schemaName,
+                        table: tableName,
+                        query_types: ['SELECT', 'INSERT', 'UPDATE', 'DELETE']
+                    })
+                });
+
+                const data = await response.json();
+                displaySampleQueries(data);
+
+            } catch (error) {
+                console.error('Error generating sample queries:', error);
+            }
+        }
+
+        // Display sample queries
+        function displaySampleQueries(data) {
+            document.getElementById('selected-table-name').textContent = 
+                `${data.catalog}.${data.schema}.${data.table}`;
+            
+            const sampleQueriesList = document.getElementById('sample-queries-list');
+            sampleQueriesList.innerHTML = data.queries.map(query => `
+                <div class="sample-query-item" onclick="insertQuery(\`${query.query.replace(/`/g, '\\`')}\`)">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="badge bg-secondary">${query.type}</span>
+                        <small class="text-muted">${query.description}</small>
+                    </div>
+                    <pre class="small mt-2 mb-0"><code>${query.query}</code></pre>
+                </div>
+            `).join('');
+
+            document.getElementById('sample-queries-panel').style.display = 'block';
+        }
+
+        // Load cross-catalog examples
+        async function loadCrossCatalogExamples() {
+            try {
+                const response = await fetch('/api/v1/analysis/cross-catalog-examples');
+                const data = await response.json();
+                
+                const examplesList = document.getElementById('cross-catalog-examples-list');
+                examplesList.innerHTML = data.examples.map((example, index) => `
+                    <div class="sample-query-item" onclick="insertQuery(\`${example.query.replace(/`/g, '\\`')}\`)">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <strong class="text-primary">${example.title}</strong>
+                            <small class="text-muted">${example.catalogs.join(' + ')}</small>
+                        </div>
+                        <small class="text-muted">${example.description}</small>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading cross-catalog examples:', error);
+            }
+        }
+
+        // Insert query into editor
+        function insertQuery(query) {
+            queryEditor.setValue(query);
+            queryEditor.focus();
+        }
+
+        // Execute query
+        async function executeQuery() {
+            const query = queryEditor.getValue().trim();
+            
+            if (!query) {
+                alert('Please enter a query to execute');
+                return;
+            }
+
+            // Update UI
+            document.getElementById('query-stats').innerHTML = 
+                '<i class="fas fa-spinner fa-spin me-2"></i>Executing query...';
+            document.getElementById('table-results-content').innerHTML = `
+                <div class="text-center text-muted py-5">
+                    <i class="fas fa-spinner fa-spin fa-3x mb-3"></i>
+                    <p>Executing query...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('/api/v1/analysis/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        limit: 1000
+                    })
+                });
+
+                const result = await response.json();
+                currentQueryResult = result;
+                displayQueryResults(result);
+
+                // Get visualization recommendation if we have data
+                if (result.data && result.data.length > 0) {
+                    await getVisualizationRecommendation(result);
+                }
+
+            } catch (error) {
+                console.error('Error executing query:', error);
+                document.getElementById('table-results-content').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error executing query: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Display query results
+        function displayQueryResults(result) {
+            currentQueryResult = result;
+            
+            if (!result || !result.columns || !result.data) {
+                document.getElementById('table-results-content').innerHTML = '<div class="alert alert-warning">No data to display</div>';
+                return;
+            }
+
+            // Update query stats
+            document.getElementById('query-stats').innerHTML = `
+                <i class="fas fa-check-circle text-success me-1"></i>
+                ${result.row_count} rows in ${result.execution_time_ms.toFixed(1)}ms
+                ${result.query_id ? ` | Query ID: ${result.query_id}` : ''}
+            `;
+            
+            // Create table HTML for the table results content area
+            let tableHtml = `
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead class="table-dark">
+                            <tr>
+            `;
+            
+            // Add column headers
+            result.columns.forEach(column => {
+                tableHtml += `<th>${column}</th>`;
+            });
+            tableHtml += '</tr></thead><tbody>';
+            
+            // Add data rows
+            result.data.forEach(row => {
+                tableHtml += '<tr>';
+                row.forEach(cell => {
+                    const cellValue = cell === null || cell === undefined ? '<em class="text-muted">NULL</em>' : String(cell);
+                    tableHtml += `<td>${cellValue}</td>`;
+                });
+                tableHtml += '</tr>';
+            });
+            
+            tableHtml += `
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Showing ${result.row_count} rows
+                        ${result.query_id ? ` | Query executed with ID: ${result.query_id}` : ''}
+                    </small>
+                </div>
+            `;
+            
+            // Update the table results content
+            document.getElementById('table-results-content').innerHTML = tableHtml;
+            
+            // Ensure table view is active first
+            switchResultsTab('table');
+            
+            // Smooth scroll to results and visual feedback
+            setTimeout(() => {
+                const resultsPanel = document.querySelector('.results-panel');
+                if (resultsPanel) {
+                    resultsPanel.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start',
+                        inline: 'nearest'
+                    });
+                    
+                    // Add visual highlight with animation
+                    resultsPanel.style.transition = 'box-shadow 0.3s ease-in-out, border-color 0.3s ease-in-out';
+                    resultsPanel.style.boxShadow = '0 0 20px rgba(0, 123, 255, 0.3)';
+                    resultsPanel.style.borderColor = '#007bff';
+                    
+                    // Show success toast notification
+                    showResultsNotification(`✅ Query results displayed: ${result.row_count} rows`, 'success');
+                    
+                    // Reset highlight after animation
+                    setTimeout(() => {
+                        resultsPanel.style.boxShadow = '';
+                        resultsPanel.style.borderColor = '#dee2e6';
+                    }, 2000);
+                }
+            }, 100);
+            
+            // Automatically generate visualization recommendation if we have data
+            if (result.data.length > 0) {
+                setTimeout(() => getVisualizationRecommendation(result), 300);
+            }
+        }
+
+        // Show results notification
+        function showResultsNotification(message, type = 'info') {
+            // Remove existing notifications
+            const existingNotifications = document.querySelectorAll('.results-notification');
+            existingNotifications.forEach(notification => notification.remove());
+            
+            // Determine alert class based on type
+            let alertClass = 'alert-info';
+            if (type === 'success') alertClass = 'alert-success';
+            else if (type === 'error' || type === 'danger') alertClass = 'alert-danger';
+            else if (type === 'warning') alertClass = 'alert-warning';
+            
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `alert ${alertClass} results-notification`;
+            notification.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                z-index: 1060;
+                min-width: 300px;
+                opacity: 0;
+                transform: translateX(100%);
+                transition: all 0.3s ease-in-out;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            `;
+            notification.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <span class="me-auto">${message}</span>
+                    <button type="button" class="btn-close ms-2" onclick="this.parentElement.parentElement.remove()"></button>
+                </div>
+            `;
+            
+            // Add to page
+            document.body.appendChild(notification);
+            
+            // Animate in
+            setTimeout(() => {
+                notification.style.opacity = '1';
+                notification.style.transform = 'translateX(0)';
+            }, 10);
+            
+            // Auto remove after 4 seconds (longer for error/warning)
+            const autoRemoveDelay = (type === 'error' || type === 'warning') ? 6000 : 4000;
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => notification.remove(), 300);
+            }, autoRemoveDelay);
+        }
+
+        // Utility function to ensure content is fully visible
+        function ensureFullContentVisible(element, additionalOffset = 100) {
+            if (!element) return;
+            
+            setTimeout(() => {
+                const elementRect = element.getBoundingClientRect();
+                const elementBottom = elementRect.bottom;
+                const viewportHeight = window.innerHeight;
+                
+                // Check if element bottom is outside viewport
+                if (elementBottom > viewportHeight) {
+                    const scrollAmount = elementBottom - viewportHeight + additionalOffset;
+                    window.scrollBy({
+                        top: scrollAmount,
+                        behavior: 'smooth'
+                    });
+                }
+            }, 100);
+        }
+
+        // Clear query
+        function clearQuery() {
+            queryEditor.setValue('');
+            queryEditor.focus();
+        }
+
+        // Format query (basic)
+        function formatQuery() {
+            const query = queryEditor.getValue();
+            // Basic SQL formatting
+            const formatted = query
+                .replace(/\bSELECT\b/gi, 'SELECT')
+                .replace(/\bFROM\b/gi, '\nFROM')
+                .replace(/\bWHERE\b/gi, '\nWHERE')
+                .replace(/\bJOIN\b/gi, '\nJOIN')
+                .replace(/\bLEFT JOIN\b/gi, '\nLEFT JOIN')
+                .replace(/\bRIGHT JOIN\b/gi, '\nRIGHT JOIN')
+                .replace(/\bINNER JOIN\b/gi, '\nINNER JOIN')
+                .replace(/\bFULL OUTER JOIN\b/gi, '\nFULL OUTER JOIN')
+                .replace(/\bORDER BY\b/gi, '\nORDER BY')
+                .replace(/\bGROUP BY\b/gi, '\nGROUP BY')
+                .replace(/\bHAVING\b/gi, '\nHAVING')
+                .replace(/\bLIMIT\b/gi, '\nLIMIT');
+            
+            queryEditor.setValue(formatted);
+        }
+
+        // Refresh catalog
+        function refreshCatalog() {
+            loadCatalogData();
+        }
+
+        // Initialize Speech Recognition
+        function initializeSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
+
+                recognition.onstart = function() {
+                    isRecording = true;
+                    document.getElementById('voice-button').classList.add('recording');
+                    document.getElementById('voice-button').innerHTML = '<i class="fas fa-stop"></i>';
+                    showNLQueryStatus('Listening... Speak your query now.');
+                };
+
+                recognition.onresult = function(event) {
+                    const transcript = event.results[0][0].transcript;
+                    document.getElementById('nl-query-input').value = transcript;
+                    showNLQueryStatus(`Heard: "${transcript}"`);
+                };
+
+                recognition.onend = function() {
+                    isRecording = false;
+                    document.getElementById('voice-button').classList.remove('recording');
+                    document.getElementById('voice-button').innerHTML = '<i class="fas fa-microphone"></i>';
+                    hideNLQueryStatus();
+                };
+
+                recognition.onerror = function(event) {
+                    showNLQueryStatus('Speech recognition error: ' + event.error, 'error');
+                    setTimeout(hideNLQueryStatus, 3000);
+                };
+            } else {
+                // Hide voice button if speech recognition is not supported
+                document.getElementById('voice-button').style.display = 'none';
+            }
+        }
+
+        // Toggle voice input
+        function toggleVoiceInput() {
+            if (!recognition) return;
+            
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                recognition.start();
+            }
+        }
+
+        // Show/hide NL query status
+        function showNLQueryStatus(message, type = 'info') {
+            const statusEl = document.getElementById('nl-query-status');
+            statusEl.innerHTML = `<i class="fas fa-${type === 'error' ? 'exclamation-triangle' : 'info-circle'} me-1"></i>${message}`;
+            statusEl.className = `small mt-2 text-${type === 'error' ? 'danger' : 'muted'}`;
+            statusEl.style.display = 'block';
+        }
+
+        function hideNLQueryStatus() {
+            document.getElementById('nl-query-status').style.display = 'none';
+        }
+
+        // Handle Enter key in NL query input
+        function handleNLQueryKeyPress(event) {
+            if (event.key === 'Enter') {
+                executeNaturalLanguageQuery();
+            }
+        }
+
+        // Execute natural language query
+        async function executeNaturalLanguageQuery() {
+            const query = document.getElementById('nl-query-input').value.trim();
+            
+            if (!query) {
+                alert('Please enter a natural language query');
+                return;
+            }
+
+            const statusEl = document.getElementById('nl-query-status');
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Converting natural language to SQL...';
+
+            try {
+                const selectedModel = document.getElementById('model-selector').value;
+                
+                const response = await fetch('/api/v1/analysis/chat-query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        model_key: selectedModel || null
+                    })
+                });
+
+                // Get response text first
+                const responseText = await response.text();
+                
+                if (response.ok) {
+                    try {
+                        // Try to parse as JSON
+                        const result = JSON.parse(responseText);
+                        
+                        // Set the converted SQL in the editor
+                        if (result.nl_response && result.nl_response.sql_query) {
+                            queryEditor.setValue(result.nl_response.sql_query);
+                            
+                            statusEl.innerHTML = `
+                                <i class="fas fa-check-circle text-success me-1"></i>
+                                Query converted successfully! 
+                                <small>(Confidence: ${(result.nl_response.confidence * 100).toFixed(1)}%)</small>
+                                <br><small class="text-muted">${result.nl_response.explanation}</small>
+                            `;
+                            
+                            // Show notes if any
+                            if (result.notes && result.notes.length > 0) {
+                                statusEl.innerHTML += `<br><small class="text-warning"><i class="fas fa-info-circle me-1"></i>${result.notes.join(', ')}</small>`;
+                            }
+                        }
+                        
+                        // If query was executed and has results, show them
+                        if (result.query_result && result.query_result.data) {
+                            displayQueryResults(result.query_result);
+                            
+                            // Show visualization if available
+                            if (result.visualization_recommendation) {
+                                showVisualizationRecommendation(result.visualization_recommendation);
+                            }
+                        }
+                    } catch (parseError) {
+                        // Response is not JSON
+                        statusEl.innerHTML = `
+                            <i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                            Server returned non-JSON response: ${responseText.substring(0, 100)}...
+                        `;
+                    }
+                } else {
+                    // Handle error responses
+                    if (responseText.includes('Internal Server Error')) {
+                        statusEl.innerHTML = `
+                            <i class="fas fa-times-circle text-danger me-1"></i>
+                            Internal server error occurred. This may be due to missing API keys or database connection issues.
+                            <br><small class="text-muted">Please check server configuration and try again.</small>
+                        `;
+                    } else {
+                        try {
+                            const errorData = JSON.parse(responseText);
+                            const errorMessage = errorData.detail || errorData.message || 'Server error';
+                            statusEl.innerHTML = `
+                                <i class="fas fa-times-circle text-danger me-1"></i>
+                                Error: ${errorMessage}
+                            `;
+                        } catch (parseError) {
+                            statusEl.innerHTML = `
+                                <i class="fas fa-times-circle text-danger me-1"></i>
+                                Error: ${responseText.substring(0, 200)}
+                            `;
+                        }
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error with natural language query:', error);
+                statusEl.innerHTML = `
+                    <i class="fas fa-times-circle text-danger me-1"></i>
+                    Network error: ${error.message}
+                `;
+            }
+        }
+
+        // Switch between results tabs
+        function switchResultsTab(tabName) {
+            // Update tab appearance
+            document.querySelectorAll('.results-tab').forEach(tab => tab.classList.remove('active'));
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Update header title based on selected tab
+            const headerTitle = document.querySelector('.results-panel h6');
+            if (headerTitle) {
+                if (tabName === 'table') {
+                    headerTitle.innerHTML = '<i class="fas fa-table me-2"></i>Query Results - Table View';
+                } else if (tabName === 'chart') {
+                    headerTitle.innerHTML = '<i class="fas fa-chart-bar me-2"></i>Query Results - Visualization';
+                }
+            }
+            
+            // Switch content with enhanced functionality
+            if (tabName === 'table') {
+                document.getElementById('table-results-content').style.display = 'block';
+                document.getElementById('chart-results-content').style.display = 'none';
+                
+                // Scroll to table results with proper positioning
+                setTimeout(() => {
+                    const tableContent = document.getElementById('table-results-content');
+                    if (tableContent) {
+                        tableContent.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'start',
+                            inline: 'nearest'
+                        });
+                        
+                        // Add visual feedback
+                        tableContent.style.transition = 'background-color 0.3s ease-in-out';
+                        tableContent.style.backgroundColor = 'rgba(40, 167, 69, 0.05)';
+                        
+                        showResultsNotification('📋 Switched to table view', 'info');
+                        
+                        setTimeout(() => {
+                            tableContent.style.backgroundColor = '';
+                        }, 1500);
+                    }
+                }, 100);
+                
+            } else if (tabName === 'chart') {
+                document.getElementById('table-results-content').style.display = 'none';
+                document.getElementById('chart-results-content').style.display = 'block';
+                
+                // Enhanced scroll to chart results with bottom padding consideration
+                setTimeout(() => {
+                    const chartResultsContent = document.getElementById('chart-results-content');
+                    const chartContainer = document.getElementById('chart-container');
+                    
+                    if (chartResultsContent) {
+                        // Scroll to ensure full content is visible including bottom padding
+                        chartResultsContent.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'start',
+                            inline: 'nearest'
+                        });
+                        
+                        // Additional scroll to ensure bottom content is visible
+                        setTimeout(() => {
+                            const viewportHeight = window.innerHeight;
+                            const contentHeight = chartResultsContent.offsetHeight;
+                            const currentScrollY = window.scrollY;
+                            
+                            // Calculate if we need additional scroll to see bottom content
+                            const additionalScroll = Math.max(0, contentHeight - viewportHeight + 100);
+                            
+                            if (additionalScroll > 0) {
+                                window.scrollBy({
+                                    top: additionalScroll,
+                                    behavior: 'smooth'
+                                });
+                            }
+                        }, 500);
+                        
+                        // Add visual highlight for chart area
+                        chartResultsContent.style.transition = 'background-color 0.3s ease-in-out, border-color 0.3s ease-in-out';
+                        chartResultsContent.style.backgroundColor = 'rgba(0, 123, 255, 0.05)';
+                        
+                        // Show notification for chart view
+                        showResultsNotification('📊 Switched to visualization view', 'info');
+                        
+                        // Reset highlight
+                        setTimeout(() => {
+                            chartResultsContent.style.backgroundColor = '';
+                        }, 2000);
+                        
+                        // Re-render chart if available (fixes chart display issues)
+                        if (currentVisualization && currentVisualization.config) {
+                            setTimeout(() => {
+                                try {
+                                    renderVisualization(currentVisualization.config);
+                                } catch (error) {
+                                    console.error('Error re-rendering chart:', error);
+                                }
+                            }, 600);
+                        }
+                        
+                        // If no chart is available but we have query results, try to generate one
+                        else if (currentQueryResult && currentQueryResult.data && currentQueryResult.data.length > 0) {
+                            setTimeout(() => {
+                                getVisualizationRecommendation(currentQueryResult);
+                            }, 800);
+                        }
+                    }
+                }, 100);
+            }
+        }
+
+        // Show visualization recommendation
+        function showVisualizationRecommendation(recommendation) {
+            const recommendationEl = document.getElementById('chart-recommendation');
+            const textEl = document.getElementById('recommendation-text');
+            
+            // Handle undefined values with fallbacks
+            const title = recommendation.title || recommendation.chart_type || 'Data Visualization';
+            const description = recommendation.description || 'AI-generated visualization for your query results';
+            const rationale = recommendation.rationale || 'Automatically selected based on data characteristics';
+            
+            textEl.innerHTML = `
+                <strong>${title}</strong><br>
+                <small class="text-muted">${description}</small><br>
+                <em>Rationale:</em> ${rationale}
+            `;
+            
+            recommendationEl.style.display = 'block';
+            
+            // Update chart type selector
+            const chartTypeSelector = document.getElementById('chart-type-selector');
+            if (chartTypeSelector && recommendation.chart_type) {
+                chartTypeSelector.value = recommendation.chart_type;
+            }
+            
+            // Show chart - handle both 'config' and 'chart_config' properties
+            const chartConfig = recommendation.config || recommendation.chart_config;
+            if (chartConfig) {
+                // Store current visualization for later use
+                currentVisualization = recommendation;
+                
+                renderVisualization(chartConfig);
+                document.getElementById('chart-controls').style.display = 'flex';
+                
+                // Auto switch to chart tab if not already active
+                const chartTab = document.getElementById('chart-tab');
+                if (!chartTab.classList.contains('active')) {
+                    switchResultsTab('chart');
+                } else {
+                    // If already on chart tab, just scroll to chart area
+                    setTimeout(() => {
+                        const chartResultsContent = document.getElementById('chart-results-content');
+                        if (chartResultsContent) {
+                            chartResultsContent.scrollIntoView({ 
+                                behavior: 'smooth', 
+                                block: 'start',
+                                inline: 'nearest'
+                            });
+                            
+                            // Add highlight effect
+                            chartResultsContent.style.transition = 'background-color 0.3s ease-in-out';
+                            chartResultsContent.style.backgroundColor = 'rgba(40, 167, 69, 0.05)';
+                            
+                            // Show chart notification
+                            showResultsNotification(`📈 ${title} generated successfully`, 'success');
+                            
+                            // Reset highlight
+                            setTimeout(() => {
+                                chartResultsContent.style.backgroundColor = '';
+                            }, 2000);
+                        }
+                    }, 200);
+                }
+            } else {
+                console.error('No chart configuration found in recommendation:', recommendation);
+                showResultsNotification('⚠️ Chart configuration error - unable to display visualization', 'warning');
+                
+                // Show fallback message in chart container
+                const chartContainer = document.getElementById('chart-container');
+                if (chartContainer) {
+                    chartContainer.innerHTML = `
+                        <div class="alert alert-warning text-center">
+                            <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                            <h6>Chart Configuration Error</h6>
+                            <p>Unable to generate visualization for this data.</p>
+                            <small class="text-muted">Try selecting a different chart type or refreshing the visualization.</small>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Render visualization using Plotly
+        function renderVisualization(config) {
+            try {
+                const chartContainer = document.getElementById('chart-container');
+                if (!chartContainer) {
+                    console.error('Chart container not found');
+                    return;
+                }
+                
+                if (!config || !config.data) {
+                    console.error('Invalid chart configuration:', config);
+                    chartContainer.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle me-2"></i>Invalid chart configuration</div>';
+                    return;
+                }
+                
+                // Clear any existing content
+                chartContainer.innerHTML = '';
+                
+                // Set container dimensions
+                chartContainer.style.minHeight = '450px';
+                chartContainer.style.width = '100%';
+                chartContainer.style.position = 'relative';
+                
+                // Improve layout configuration
+                const improvedLayout = {
+                    ...config.layout,
+                    autosize: true,
+                    margin: {
+                        l: 60,
+                        r: 40,
+                        t: 60,
+                        b: 60,
+                        pad: 10
+                    },
+                    font: {
+                        family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+                        size: 12
+                    },
+                    paper_bgcolor: 'white',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    showlegend: config.layout.showlegend !== false,
+                    hovermode: 'closest'
+                };
+                
+                // Improve config
+                const improvedConfig = {
+                    responsive: true,
+                    displayModeBar: true,
+                    displaylogo: false,
+                    modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
+                    toImageButtonOptions: {
+                        format: 'png',
+                        filename: 'chart',
+                        height: 500,
+                        width: 800,
+                        scale: 1
+                    },
+                    ...config.config
+                };
+                
+                // Create the Plotly chart
+                Plotly.newPlot(chartContainer, config.data, improvedLayout, improvedConfig).then(() => {
+                    console.log('Chart rendered successfully');
+                    
+                    // Ensure chart is properly sized after render
+                    setTimeout(() => {
+                        try {
+                            Plotly.Plots.resize(chartContainer);
+                        } catch (resizeError) {
+                            console.warn('Chart resize warning:', resizeError);
+                        }
+                    }, 200);
+                    
+                    // Add window resize listener for responsiveness
+                    const resizeHandler = () => {
+                        try {
+                            Plotly.Plots.resize(chartContainer);
+                        } catch (resizeError) {
+                            console.warn('Chart resize on window resize warning:', resizeError);
+                        }
+                    };
+                    
+                    // Remove existing listener if any
+                    window.removeEventListener('resize', resizeHandler);
+                    window.addEventListener('resize', resizeHandler);
+                    
+                }).catch((error) => {
+                    console.error('Error rendering Plotly chart:', error);
+                    chartContainer.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Error rendering chart: ${error.message}
+                            <br><small class="text-muted">Please try switching chart types or refreshing the visualization.</small>
+                        </div>
+                    `;
+                });
+                
+            } catch (error) {
+                console.error('Error in renderVisualization:', error);
+                const chartContainer = document.getElementById('chart-container');
+                if (chartContainer) {
+                    chartContainer.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Error rendering visualization: ${error.message}
+                            <br><small class="text-muted">Please try refreshing or contact support if the issue persists.</small>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Update visualization based on chart type selector
+        async function updateVisualization() {
+            if (!currentQueryResult || !currentQueryResult.data) return;
+
+            const chartType = document.getElementById('chart-type-selector').value;
+            
+            try {
+                // Prepare column information
+                const columns = currentQueryResult.columns.map(col => ({name: col, type: 'string'}));
+                
+                const response = await fetch('/api/v1/analysis/visualize-recommend', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        data: currentQueryResult.data.map(row => {
+                            const obj = {};
+                            currentQueryResult.columns.forEach((col, index) => {
+                                obj[col] = row[index];
+                            });
+                            return obj;
+                        }),
+                        columns: columns,
+                        query_description: document.getElementById('nl-query-input').value || 'Manual chart type selection'
+                    })
+                });
+
+                const recommendation = await response.json();
+                
+                // Override chart type with user selection
+                recommendation.chart_type = chartType;
+                recommendation.config = await createPlotlyConfig(chartType, currentQueryResult);
+                
+                renderVisualization(recommendation.config);
+
+            } catch (error) {
+                console.error('Error updating visualization:', error);
+            }
+        }
+
+        // Create Plotly configuration for different chart types
+        async function createPlotlyConfig(chartType, queryResult) {
+            const columns = queryResult.columns;
+            const data = queryResult.data.map(row => {
+                const obj = {};
+                columns.forEach((col, index) => {
+                    obj[col] = row[index];
+                });
+                return obj;
+            });
+
+            let config = {
+                data: [],
+                layout: {
+                    title: {
+                        text: 'Query Results Visualization',
+                        font: { size: 16 },
+                        pad: { t: 20 }
+                    },
+                    showlegend: true,
+                    autosize: true,
+                    margin: {
+                        l: 70,
+                        r: 50,
+                        t: 80,
+                        b: 70,
+                        pad: 10
+                    },
+                    font: {
+                        family: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+                        size: 12
+                    },
+                    paper_bgcolor: 'white',
+                    plot_bgcolor: 'rgba(248, 249, 250, 0.5)',
+                    hovermode: 'closest'
+                },
+                config: {
+                    responsive: true,
+                    displayModeBar: true,
+                    displaylogo: false,
+                    modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d']
+                }
+            };
+
+            if (chartType === 'table') {
+                config.data = [{
+                    type: 'table',
+                    header: {
+                        values: columns,
+                        fill: {color: '#C2D4FF'},
+                        align: 'left',
+                        font: {size: 12, color: 'black'}
+                    },
+                    cells: {
+                        values: columns.map(col => data.map(row => row[col])),
+                        fill: {color: '#F5F8FF'},
+                        align: 'left',
+                        font: {size: 11}
+                    }
+                }];
+                config.layout.title.text = 'Data Table';
+            } else if (chartType === 'bar' && columns.length >= 2) {
+                config.data = [{
+                    x: data.map(row => row[columns[0]]),
+                    y: data.map(row => row[columns[1]]),
+                    type: 'bar',
+                    name: columns[1],
+                    marker: {
+                        color: 'rgba(55, 128, 191, 0.7)',
+                        line: {
+                            color: 'rgba(55, 128, 191, 1.0)',
+                            width: 1
+                        }
+                    }
+                }];
+                config.layout.xaxis = {title: columns[0], tickangle: -45};
+                config.layout.yaxis = {title: columns[1]};
+                config.layout.title.text = `${columns[1]} by ${columns[0]}`;
+            } else if (chartType === 'line' && columns.length >= 2) {
+                config.data = [{
+                    x: data.map(row => row[columns[0]]),
+                    y: data.map(row => row[columns[1]]),
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: columns[1],
+                    line: {
+                        color: 'rgb(55, 128, 191)',
+                        width: 2
+                    },
+                    marker: {
+                        color: 'rgba(55, 128, 191, 0.8)',
+                        size: 6
+                    }
+                }];
+                config.layout.xaxis = {title: columns[0]};
+                config.layout.yaxis = {title: columns[1]};
+                config.layout.title.text = `${columns[1]} over ${columns[0]}`;
+            } else if (chartType === 'pie' && columns.length >= 2) {
+                config.data = [{
+                    labels: data.map(row => row[columns[0]]),
+                    values: data.map(row => row[columns[1]]),
+                    type: 'pie',
+                    textinfo: 'label+percent',
+                    textposition: 'outside',
+                    automargin: true
+                }];
+                config.layout.title.text = `Distribution of ${columns[1]}`;
+                config.layout.margin = { l: 50, r: 50, t: 80, b: 50, pad: 10 };
+            } else if (chartType === 'scatter' && columns.length >= 2) {
+                config.data = [{
+                    x: data.map(row => row[columns[0]]),
+                    y: data.map(row => row[columns[1]]),
+                    type: 'scatter',
+                    mode: 'markers',
+                    name: columns[1],
+                    marker: {
+                        color: 'rgba(55, 128, 191, 0.7)',
+                        size: 8,
+                        line: {
+                            color: 'rgba(55, 128, 191, 1.0)',
+                            width: 1
+                        }
+                    }
+                }];
+                config.layout.xaxis = {title: columns[0]};
+                config.layout.yaxis = {title: columns[1]};
+                config.layout.title.text = `${columns[1]} vs ${columns[0]}`;
+            }
+
+            return config;
+        }
+
+        // Refresh visualization
+        function refreshVisualization() {
+            if (currentVisualization && currentVisualization.config) {
+                try {
+                    showResultsNotification('🔄 Refreshing chart...', 'info');
+                    renderVisualization(currentVisualization.config);
+                    
+                    // Scroll to chart area after refresh
+                    setTimeout(() => {
+                        const chartResultsContent = document.getElementById('chart-results-content');
+                        if (chartResultsContent && chartResultsContent.style.display !== 'none') {
+                            chartResultsContent.scrollIntoView({ 
+                                behavior: 'smooth', 
+                                block: 'start',
+                                inline: 'nearest'
+                            });
+                        }
+                    }, 500);
+                    
+                } catch (error) {
+                    console.error('Error refreshing visualization:', error);
+                    showResultsNotification('❌ Error refreshing chart', 'error');
+                }
+            } else if (currentQueryResult && currentQueryResult.data && currentQueryResult.data.length > 0) {
+                // If no current visualization but we have query results, generate a new one
+                showResultsNotification('🔄 Generating new visualization...', 'info');
+                getVisualizationRecommendation(currentQueryResult);
+            } else {
+                showResultsNotification('⚠️ No data available for visualization', 'warning');
+            }
+        }
+
+        // Get visualization recommendation
+        async function getVisualizationRecommendation(queryResult) {
+            try {
+                const data = queryResult.data.map(row => {
+                    const obj = {};
+                    queryResult.columns.forEach((col, index) => {
+                        obj[col] = row[index];
+                    });
+                    return obj;
+                });
+
+                const selectedModel = document.getElementById('model-selector').value;
+
+                const response = await fetch('/api/v1/analysis/visualize-recommend', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        data: data,
+                        data_summary: {row_count: data.length},
+                        user_intent: document.getElementById('nl-query-input').value || 'SQL Query Result',
+                        model_key: selectedModel || null
+                    })
+                });
+
+                const recommendation = await response.json();
+                currentVisualization = recommendation;
+                showVisualizationRecommendation(recommendation);
+
+            } catch (error) {
+                console.error('Error getting visualization recommendation:', error);
+            }
+        }
+
+        // ========== LLM Model Management Functions ==========
+        
+        let availableModels = [];
+        let currentModel = null;
+
+        // Load available LLM models
+        async function loadLLMModels() {
+            try {
+                const response = await fetch('/api/v1/analysis/llm-models');
+                const data = await response.json();
+                
+                availableModels = data.available_models;
+                currentModel = data.current_model;
+                
+                populateModelSelector();
+                updateModelStatus();
+                
+            } catch (error) {
+                console.error('Error loading LLM models:', error);
+                updateModelStatus('error', 'Failed to load models');
+            }
+        }
+
+        // Populate model selector dropdown
+        function populateModelSelector() {
+            const selector = document.getElementById('model-selector');
+            const providerFilter = document.getElementById('provider-filter').value;
+            
+            // Clear existing options
+            selector.innerHTML = '';
+            
+            // Filter models by provider if selected
+            let filteredModels = availableModels;
+            if (providerFilter !== 'all') {
+                filteredModels = availableModels.filter(model => model.provider === providerFilter);
+            }
+            
+            if (filteredModels.length === 0) {
+                selector.innerHTML = '<option value="">No models available</option>';
+                return;
+            }
+            
+            // Add models to dropdown
+            filteredModels.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.key;
+                option.textContent = model.display_name;
+                
+                // Mark current model as selected
+                if (model.key === currentModel) {
+                    option.selected = true;
+                }
+                
+                selector.appendChild(option);
+            });
+            
+            // Update model info display
+            if (selector.value) {
+                updateModelInfo(selector.value);
+            }
+        }
+
+        // Filter models by provider
+        function filterModelsByProvider() {
+            populateModelSelector();
+        }
+
+        // Change active model
+        async function changeModel() {
+            const selectedModelKey = document.getElementById('model-selector').value;
+            
+            if (!selectedModelKey) return;
+            
+            try {
+                updateModelStatus('loading', 'Changing model...');
+                
+                const response = await fetch('/api/v1/analysis/set-default-model', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model_key: selectedModelKey
+                    })
+                });
+                
+                if (response.ok) {
+                    currentModel = selectedModelKey;
+                    updateModelInfo(selectedModelKey);
+                    updateModelStatus('available', 'Model changed successfully');
+                } else {
+                    const error = await response.json();
+                    updateModelStatus('error', `Failed to change model: ${error.detail}`);
+                }
+                
+            } catch (error) {
+                console.error('Error changing model:', error);
+                updateModelStatus('error', 'Failed to change model');
+            }
+        }
+
+        // Update model information display
+        function updateModelInfo(modelKey) {
+            const model = availableModels.find(m => m.key === modelKey);
+            const infoEl = document.getElementById('model-info');
+            
+            if (!model) {
+                infoEl.innerHTML = '';
+                return;
+            }
+            
+            infoEl.innerHTML = `
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <span class="provider-badge provider-${model.provider}">${model.provider.toUpperCase()}</span>
+                    <span class="small">Model: ${model.model_name}</span>
+                    ${model.max_tokens ? `<span class="small">Max Tokens: ${model.max_tokens}</span>` : ''}
+                    ${model.supports_streaming ? '<span class="badge bg-success">Streaming</span>' : ''}
+                    ${model.supports_json_mode ? '<span class="badge bg-info">JSON Mode</span>' : ''}
+                </div>
+            `;
+        }
+
+        // Update model status indicator
+        function updateModelStatus(status = 'available', message = 'Model ready') {
+            const indicator = document.getElementById('model-status-indicator');
+            const text = document.getElementById('model-status-text');
+            
+            // Remove existing status classes
+            indicator.className = 'status-indicator';
+            
+            // Add appropriate status class
+            switch (status) {
+                case 'available':
+                    indicator.classList.add('status-available');
+                    break;
+                case 'loading':
+                    indicator.classList.add('status-unavailable');
+                    break;
+                case 'error':
+                    indicator.classList.add('status-unavailable');
+                    break;
+                default:
+                    indicator.classList.add('status-available');
+            }
+            
+            text.textContent = message;
+        }
+
+        // Refresh models
+        async function refreshModels() {
+            updateModelStatus('loading', 'Refreshing models...');
+            await loadLLMModels();
+        }
+
+        // Execute SQL query directly
+        async function executeSQL() {
+            const sqlQuery = queryEditor.getValue().trim();
+            
+            if (!sqlQuery) {
+                alert('Please enter a SQL query');
+                return;
+            }
+
+            const statusEl = document.getElementById('query-status');
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Executing SQL query...';
+            statusEl.className = 'small mt-2 text-info';
+
+            try {
+                const response = await fetch('/api/v1/analysis/execute-sql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sql_query: sqlQuery,
+                        catalog: 'memory',
+                        schema: 'default'
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    statusEl.innerHTML = `
+                        <i class="fas fa-check-circle text-success me-1"></i>
+                        Query executed successfully! 
+                        <small>(${result.execution_time_ms.toFixed(1)}ms, ${result.query_result.row_count} rows)</small>
+                    `;
+                    statusEl.className = 'small mt-2 text-success';
+                    
+                    // Display results
+                    displayQueryResults(result.query_result);
+                    
+                    // Show visualization if available
+                    if (result.visualization_recommendation) {
+                        setTimeout(() => {
+                            showVisualizationRecommendation(result.visualization_recommendation);
+                        }, 200);
+                    }
+                } else {
+                    statusEl.innerHTML = `
+                        <i class="fas fa-times-circle text-danger me-1"></i>
+                        Error: ${result.error || 'Unknown error occurred'}
+                    `;
+                    statusEl.className = 'small mt-2 text-danger';
+                    
+                    // Show error result if query_result exists
+                    if (result.query_result) {
+                        displayQueryResults(result.query_result);
+                    }
+                }
+
+            } catch (error) {
+                console.error('Error executing SQL:', error);
+                statusEl.innerHTML = `
+                    <i class="fas fa-times-circle text-danger me-1"></i>
+                    Network error: ${error.message}
+                `;
+                statusEl.className = 'small mt-2 text-danger';
+            }
+        }
+
+        // Handle Ctrl+Enter or Cmd+Enter to execute SQL
+        function handleSQLKeyPress(event) {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                executeSQL();
+            }
+        }
+    </script>
+</body>
+</html> 

@@ -1,0 +1,652 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-history me-2"></i>Activity Logs</h2>
+        <p class="text-muted">Track and monitor user activities across the platform</p>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Total Activities</h6>
+                        <h3 class="mb-0" id="total-activities">-</h3>
+                    </div>
+                    <i class="fas fa-chart-line fa-2x opacity-75"></i>
+                </div>
+                <small class="text-white-50">Last 7 days</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Success Rate</h6>
+                        <h3 class="mb-0" id="success-rate">-</h3>
+                    </div>
+                    <i class="fas fa-check-circle fa-2x opacity-75"></i>
+                </div>
+                <small class="text-white-50">Success vs total</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Active Users</h6>
+                        <h3 class="mb-0" id="active-users">-</h3>
+                    </div>
+                    <i class="fas fa-users fa-2x opacity-75"></i>
+                </div>
+                <small class="text-white-50">Last 24 hours</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Avg Response</h6>
+                        <h3 class="mb-0" id="avg-response">-</h3>
+                    </div>
+                    <i class="fas fa-clock fa-2x opacity-75"></i>
+                </div>
+                <small class="text-white-50">Milliseconds</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Filters & Search</h6>
+            </div>
+            <div class="card-body">
+                <form id="filter-form">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <label for="activity-type-filter" class="form-label">Activity Type</label>
+                            <select class="form-select" id="activity-type-filter">
+                                <option value="">All Types</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="status-filter" class="form-label">Status</label>
+                            <select class="form-select" id="status-filter">
+                                <option value="">All Status</option>
+                                <option value="success">Success</option>
+                                <option value="failed">Failed</option>
+                                <option value="in_progress">In Progress</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="user-filter" class="form-label">User ID</label>
+                            <input type="text" class="form-control" id="user-filter" placeholder="Enter user ID">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="resource-filter" class="form-label">Resource Type</label>
+                            <select class="form-select" id="resource-filter">
+                                <option value="">All Resources</option>
+                                <option value="ontology">Ontology</option>
+                                <option value="page">Page</option>
+                                <option value="statistics">Statistics</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <label for="start-date" class="form-label">Start Date</label>
+                            <input type="datetime-local" class="form-control" id="start-date">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="end-date" class="form-label">End Date</label>
+                            <input type="datetime-local" class="form-control" id="end-date">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">&nbsp;</label>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-primary" onclick="applyFilters()">
+                                    <i class="fas fa-search me-1"></i>Search
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="clearFilters()">
+                                    <i class="fas fa-times me-1"></i>Clear
+                                </button>
+                                <button type="button" class="btn btn-outline-primary" onclick="exportLogs()">
+                                    <i class="fas fa-download me-1"></i>Export
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Activity Logs Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Activity Logs</h6>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary" onclick="refreshLogs()">
+                        <i class="fas fa-refresh me-1"></i>Refresh
+                    </button>
+                    <div class="dropdown d-inline">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                data-bs-toggle="dropdown">
+                            <i class="fas fa-cog me-1"></i>Actions
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="showRecentActivities()">
+                                <i class="fas fa-clock me-2"></i>Recent Activities
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="cleanupOldLogs()">
+                                <i class="fas fa-trash me-2"></i>Cleanup Old Logs
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" onclick="downloadTemplate()">
+                                <i class="fas fa-file-csv me-2"></i>Download Template
+                            </a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="logs-loading" class="text-center py-4" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading activity logs...</p>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover" id="logs-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>User</th>
+                                <th>Activity</th>
+                                <th>Status</th>
+                                <th>Resource</th>
+                                <th>Description</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-table-body">
+                            <!-- Logs will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <nav id="logs-pagination" style="display: none;">
+                    <ul class="pagination justify-content-center">
+                        <!-- Pagination will be inserted here -->
+                    </ul>
+                </nav>
+                
+                <div id="no-logs" class="text-center py-4" style="display: none;">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No activity logs found</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Activity Details Modal -->
+<div class="modal fade" id="activityDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Activity Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="activity-details-content">
+                    <!-- Activity details will be inserted here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activities Modal -->
+<div class="modal fade" id="recentActivitiesModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Recent Activities</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="recent-activities-content">
+                    <!-- Recent activities will be inserted here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Activity Logs specific JavaScript
+let currentPage = 1;
+let pageSize = 20;
+let currentFilters = {};
+
+document.addEventListener('DOMContentLoaded', function() {
+    initializeActivityLogs();
+});
+
+async function initializeActivityLogs() {
+    try {
+        await loadActivityTypes();
+        await loadSummaryData();
+        await loadActivityLogs();
+    } catch (error) {
+        console.error('Error initializing activity logs:', error);
+        showToast('Failed to initialize activity logs', 'danger');
+    }
+}
+
+async function loadActivityTypes() {
+    try {
+        const response = await fetch('/api/v1/activity-logs/types');
+        const data = await response.json();
+        
+        const select = document.getElementById('activity-type-filter');
+        data.activity_types.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type.value;
+            option.textContent = type.label;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading activity types:', error);
+    }
+}
+
+async function loadSummaryData() {
+    try {
+        const response = await fetch('/api/v1/activity-logs/summary?days=7');
+        const summary = await response.json();
+        
+        // Update summary cards
+        document.getElementById('total-activities').textContent = summary.total_activities || 0;
+        
+        // Calculate success rate
+        const successCount = summary.activities_by_status?.success || 0;
+        const totalCount = summary.total_activities || 1;
+        const successRate = Math.round((successCount / totalCount) * 100);
+        document.getElementById('success-rate').textContent = `${successRate}%`;
+        
+        // Get unique users (simplified for demo)
+        const activeUsers = summary.recent_activities ? 
+            new Set(summary.recent_activities.map(a => a.user_id)).size : 0;
+        document.getElementById('active-users').textContent = activeUsers;
+        
+        // Calculate average response time
+        const activities = summary.recent_activities || [];
+        const avgTime = activities.length > 0 ? 
+            activities.reduce((sum, a) => sum + (a.execution_time_ms || 0), 0) / activities.length : 0;
+        document.getElementById('avg-response').textContent = `${Math.round(avgTime)}ms`;
+        
+    } catch (error) {
+        console.error('Error loading summary data:', error);
+    }
+}
+
+async function loadActivityLogs(page = 1) {
+    const loadingElement = document.getElementById('logs-loading');
+    const tableBody = document.getElementById('logs-table-body');
+    const noLogsElement = document.getElementById('no-logs');
+    const pagination = document.getElementById('logs-pagination');
+    
+    try {
+        loadingElement.style.display = 'block';
+        tableBody.innerHTML = '';
+        noLogsElement.style.display = 'none';
+        pagination.style.display = 'none';
+        
+        // Build query parameters
+        const params = new URLSearchParams({
+            page: page,
+            page_size: pageSize,
+            ...currentFilters
+        });
+        
+        const response = await fetch(`/api/v1/activity-logs?${params}`);
+        const data = await response.json();
+        
+        loadingElement.style.display = 'none';
+        
+        if (data.logs && data.logs.length > 0) {
+            renderActivityLogs(data.logs);
+            renderPagination(data.page, Math.ceil(data.total / data.page_size), data.total);
+        } else {
+            noLogsElement.style.display = 'block';
+        }
+        
+    } catch (error) {
+        console.error('Error loading activity logs:', error);
+        loadingElement.style.display = 'none';
+        showToast('Failed to load activity logs', 'danger');
+    }
+}
+
+function renderActivityLogs(logs) {
+    const tableBody = document.getElementById('logs-table-body');
+    
+    logs.forEach(log => {
+        const row = document.createElement('tr');
+        
+        // Format timestamp
+        const timestamp = new Date(log.timestamp).toLocaleString();
+        
+        // Status badge
+        const statusBadge = getStatusBadge(log.status);
+        
+        // Activity type badge
+        const activityBadge = getActivityTypeBadge(log.activity_type);
+        
+        // Duration
+        const duration = log.execution_time_ms ? `${Math.round(log.execution_time_ms)}ms` : '-';
+        
+        row.innerHTML = `
+            <td><small>${timestamp}</small></td>
+            <td><span class="badge bg-secondary">${log.user_id}</span></td>
+            <td>${activityBadge}</td>
+            <td>${statusBadge}</td>
+            <td>${log.resource_type ? `<code>${log.resource_type}</code>` : '-'}</td>
+            <td>${truncateText(log.description, 50)}</td>
+            <td><small>${duration}</small></td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="showActivityDetails('${log.id}')">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </td>
+        `;
+        
+        tableBody.appendChild(row);
+    });
+}
+
+function getStatusBadge(status) {
+    const badges = {
+        'success': '<span class="badge bg-success">Success</span>',
+        'failed': '<span class="badge bg-danger">Failed</span>',
+        'in_progress': '<span class="badge bg-warning">In Progress</span>'
+    };
+    return badges[status] || `<span class="badge bg-secondary">${status}</span>`;
+}
+
+function getActivityTypeBadge(activityType) {
+    const color = activityType.includes('ontology') ? 'primary' : 
+                 activityType.includes('page') ? 'info' : 
+                 activityType.includes('ai') ? 'success' : 'secondary';
+    
+    const label = activityType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    return `<span class="badge bg-${color}">${label}</span>`;
+}
+
+function truncateText(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+}
+
+function renderPagination(currentPage, totalPages, totalItems) {
+    const pagination = document.getElementById('logs-pagination');
+    const paginationList = pagination.querySelector('.pagination');
+    
+    if (totalPages <= 1) {
+        pagination.style.display = 'none';
+        return;
+    }
+    
+    pagination.style.display = 'block';
+    paginationList.innerHTML = '';
+    
+    // Previous button
+    const prevItem = document.createElement('li');
+    prevItem.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+    prevItem.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage - 1})">Previous</a>`;
+    paginationList.appendChild(prevItem);
+    
+    // Page numbers
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        const pageItem = document.createElement('li');
+        pageItem.className = `page-item ${i === currentPage ? 'active' : ''}`;
+        pageItem.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i})">${i}</a>`;
+        paginationList.appendChild(pageItem);
+    }
+    
+    // Next button
+    const nextItem = document.createElement('li');
+    nextItem.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+    nextItem.innerHTML = `<a class="page-link" href="#" onclick="changePage(${currentPage + 1})">Next</a>`;
+    paginationList.appendChild(nextItem);
+    
+    // Add total items info
+    const infoItem = document.createElement('li');
+    infoItem.className = 'page-item disabled';
+    infoItem.innerHTML = `<span class="page-link">Total: ${totalItems}</span>`;
+    paginationList.appendChild(infoItem);
+}
+
+function changePage(page) {
+    if (page < 1) return;
+    currentPage = page;
+    loadActivityLogs(page);
+}
+
+function applyFilters() {
+    currentFilters = {};
+    
+    const activityType = document.getElementById('activity-type-filter').value;
+    const status = document.getElementById('status-filter').value;
+    const userId = document.getElementById('user-filter').value;
+    const resourceType = document.getElementById('resource-filter').value;
+    const startDate = document.getElementById('start-date').value;
+    const endDate = document.getElementById('end-date').value;
+    
+    if (activityType) currentFilters.activity_type = activityType;
+    if (status) currentFilters.status = status;
+    if (userId) currentFilters.user_id = userId;
+    if (resourceType) currentFilters.resource_type = resourceType;
+    if (startDate) currentFilters.start_date = startDate;
+    if (endDate) currentFilters.end_date = endDate;
+    
+    currentPage = 1;
+    loadActivityLogs(1);
+}
+
+function clearFilters() {
+    document.getElementById('filter-form').reset();
+    currentFilters = {};
+    currentPage = 1;
+    loadActivityLogs(1);
+}
+
+async function showActivityDetails(activityId) {
+    // For demo, we'll show a mock detail view
+    const modal = new bootstrap.Modal(document.getElementById('activityDetailsModal'));
+    const content = document.getElementById('activity-details-content');
+    
+    content.innerHTML = `
+        <div class="text-center py-3">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    `;
+    
+    modal.show();
+    
+    // Simulate loading
+    setTimeout(() => {
+        content.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Activity Information</h6>
+                    <table class="table table-sm">
+                        <tr><td><strong>ID:</strong></td><td>${activityId}</td></tr>
+                        <tr><td><strong>Type:</strong></td><td>Page View</td></tr>
+                        <tr><td><strong>Status:</strong></td><td><span class="badge bg-success">Success</span></td></tr>
+                        <tr><td><strong>User:</strong></td><td>anonymous</td></tr>
+                        <tr><td><strong>Duration:</strong></td><td>125ms</td></tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Additional Details</h6>
+                    <pre class="bg-light p-2 rounded"><code>{
+  "page": "ontology",
+  "ip_address": "127.0.0.1",
+  "user_agent": "Mozilla/5.0..."
+}</code></pre>
+                </div>
+            </div>
+        `;
+    }, 1000);
+}
+
+async function showRecentActivities() {
+    const modal = new bootstrap.Modal(document.getElementById('recentActivitiesModal'));
+    const content = document.getElementById('recent-activities-content');
+    
+    try {
+        const response = await fetch('/api/v1/activity-logs/recent?limit=20');
+        const data = await response.json();
+        
+        content.innerHTML = data.recent_activities.map(activity => `
+            <div class="border-bottom py-2">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <strong>${activity.description}</strong>
+                        <br>
+                        <small class="text-muted">
+                            ${new Date(activity.timestamp).toLocaleString()} • 
+                            ${activity.user_id} • 
+                            ${getStatusBadge(activity.status)}
+                        </small>
+                    </div>
+                    <div>
+                        ${activity.execution_time_ms ? `<small>${Math.round(activity.execution_time_ms)}ms</small>` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        modal.show();
+    } catch (error) {
+        console.error('Error loading recent activities:', error);
+        showToast('Failed to load recent activities', 'danger');
+    }
+}
+
+async function exportLogs() {
+    try {
+        const params = new URLSearchParams({
+            format: 'csv',
+            page_size: 10000,
+            ...currentFilters
+        });
+        
+        const response = await fetch(`/api/v1/activity-logs/export?${params}`);
+        
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `activity_logs_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            showToast('Logs exported successfully', 'success');
+        } else {
+            throw new Error('Export failed');
+        }
+    } catch (error) {
+        console.error('Error exporting logs:', error);
+        showToast('Failed to export logs', 'danger');
+    }
+}
+
+async function cleanupOldLogs() {
+    if (!confirm('Are you sure you want to cleanup old logs? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/v1/activity-logs/cleanup', {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast(`Cleaned up ${result.removed_count} old log entries`, 'success');
+            await loadActivityLogs(currentPage);
+            await loadSummaryData();
+        } else {
+            throw new Error(result.detail || 'Cleanup failed');
+        }
+    } catch (error) {
+        console.error('Error cleaning up logs:', error);
+        showToast('Failed to cleanup logs', 'danger');
+    }
+}
+
+function refreshLogs() {
+    loadActivityLogs(currentPage);
+    loadSummaryData();
+    showToast('Logs refreshed', 'info');
+}
+
+function downloadTemplate() {
+    const csvContent = `timestamp,user_id,activity_type,status,resource_type,resource_id,description,execution_time_ms
+2023-01-01T00:00:00,user1,page_view,success,page,index,Viewed page: index,125
+2023-01-01T00:01:00,user2,ontology_create,success,ontology,ont1,Created ontology: Test,1500`;
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'activity_logs_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %} 

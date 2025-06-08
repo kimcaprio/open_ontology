@@ -1,0 +1,601 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2><i class="fas fa-database me-2"></i>Data Sources</h2>
+        <p class="text-muted">Register and manage your data sources</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDataSourceModal">
+            <i class="fas fa-plus me-2"></i>Add Data Source
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Registered Data Sources</h5>
+            </div>
+            <div class="card-body">
+                <div id="data-source-list">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading data sources...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Data Source Modal -->
+<div class="modal fade" id="addDataSourceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Data Source</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="data-source-form">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">Name *</label>
+                                <input type="text" class="form-control" id="name" name="name" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="type" class="form-label">Type *</label>
+                                <select class="form-select" id="type" name="type" required>
+                                    <option value="">Select type</option>
+                                    <option value="database">Database</option>
+                                    <option value="api">API</option>
+                                    <option value="file">File System</option>
+                                    <option value="cloud_storage">Cloud Storage</option>
+                                    <option value="streaming">Streaming</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Connection Configuration</label>
+                        <div id="connection-config">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control mb-2" placeholder="Host/URL" name="host">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control mb-2" placeholder="Port" name="port">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control mb-2" placeholder="Username" name="username">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="password" class="form-control mb-2" placeholder="Password" name="password">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-12">
+                                    <input type="text" class="form-control mb-2" placeholder="Database/Schema" name="database">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="tags" class="form-label">Tags (comma-separated)</label>
+                        <input type="text" class="form-control" id="tags" name="tags" placeholder="production, analytics, customer-data">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="testConnection()">Test Connection</button>
+                <button type="button" class="btn btn-success" id="save-data-source-btn" onclick="saveDataSource()">Save Data Source</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Connection Test Result Modal -->
+<div class="modal fade" id="connectionTestModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Connection Test Result</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="connection-test-result">
+                <!-- Test result will be inserted here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Data source specific JavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, initializing data sources page');
+    
+    // Load data sources when page loads
+    loadDataSources();
+    
+    // Set up form submission
+    const form = document.getElementById('data-source-form');
+    const saveBtn = document.getElementById('save-data-source-btn');
+    
+    console.log('Form element:', form);
+    console.log('Save button element:', saveBtn);
+    
+    if (form && saveBtn) {
+        console.log('Both form and save button found, ready for interactions');
+        
+        // Prevent form submission
+        form.addEventListener('submit', function(e) {
+            console.log('Form submit event triggered, preventing default');
+            e.preventDefault();
+            return false;
+        });
+        
+        // Add click handler to save button
+        saveBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Save button clicked via event listener');
+            saveDataSource();
+        });
+    } else {
+        console.error('Form or save button not found!');
+    }
+});
+
+async function loadDataSources() {
+    console.log('Loading data sources...');
+    const listContainer = document.getElementById('data-source-list');
+    
+    if (!listContainer) {
+        console.error('List container not found');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/v1/datasources/');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const dataSources = await response.json();
+        console.log('Loaded data sources:', dataSources);
+        
+        if (dataSources.length === 0) {
+            listContainer.innerHTML = `
+                <div class="text-muted text-center py-4">
+                    <i class="fas fa-database fa-3x mb-3"></i>
+                    <p>No data sources registered yet.</p>
+                    <p>Click "Add Data Source" to get started.</p>
+                </div>
+            `;
+        } else {
+            listContainer.innerHTML = renderDataSources(dataSources);
+        }
+    } catch (error) {
+        console.error('Failed to load data sources:', error);
+        listContainer.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Failed to load data sources: ${error.message}
+            </div>
+        `;
+    }
+}
+
+function renderDataSources(dataSources) {
+    return dataSources.map(ds => `
+        <div class="card data-source-card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h5 class="card-title">
+                            ${ds.name}
+                            <span class="badge bg-primary ms-2">${ds.type}</span>
+                        </h5>
+                        <p class="card-text text-muted">${ds.description || 'No description'}</p>
+                        <div class="mb-2">
+                            ${ds.tags.map(tag => `<span class="badge bg-secondary me-1">${tag}</span>`).join('')}
+                        </div>
+                        <small class="text-muted">
+                            Created: ${new Date(ds.created_at).toLocaleDateString()}
+                            ${ds.connection_config.host ? ` | Host: ${ds.connection_config.host}` : ''}
+                        </small>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-primary" onclick="testConnectionForDataSource('${ds.id}')">
+                            <i class="fas fa-plug"></i> Test
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="scanMetadata('${ds.id}')">
+                            <i class="fas fa-search"></i> Scan
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteDataSource('${ds.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function saveDataSource() {
+    console.log('Save Data Source function called!');
+    
+    const form = document.getElementById('data-source-form');
+    const submitBtn = document.getElementById('save-data-source-btn');
+    
+    if (!form) {
+        console.error('Form not found!');
+        if (window.showToast) {
+            showToast('Form not found!', 'danger');
+        } else {
+            alert('Form not found!');
+        }
+        return;
+    }
+    
+    if (!submitBtn) {
+        console.error('Save button not found!');
+        if (window.showToast) {
+            showToast('Save button not found!', 'danger');
+        } else {
+            alert('Save button not found!');
+        }
+        return;
+    }
+    
+    const originalText = submitBtn.innerHTML;
+    
+    try {
+        console.log('Starting form validation and submission...');
+        
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+        submitBtn.disabled = true;
+        
+        const formData = new FormData(form);
+        
+        // Debug: Log all form data
+        console.log('Form data contents:');
+        for (let [key, value] of formData.entries()) {
+            console.log(`  ${key}: ${value}`);
+        }
+        
+        const data = {
+            name: formData.get('name'),
+            type: formData.get('type'),
+            description: formData.get('description'),
+            connection_config: {
+                host: formData.get('host'),
+                port: formData.get('port'),
+                username: formData.get('username'),
+                password: formData.get('password'),
+                database: formData.get('database')
+            },
+            tags: formData.get('tags') ? formData.get('tags').split(',').map(t => t.trim()) : []
+        };
+        
+        console.log('Prepared data object:', data);
+        
+        // Validate required fields
+        if (!data.name || !data.type) {
+            throw new Error('Name and Type are required fields');
+        }
+        
+        if (data.type === 'database' && (!data.connection_config.host || !data.connection_config.username)) {
+            throw new Error('Host and Username are required for database connections');
+        }
+        
+        console.log('Validation passed, sending to API...');
+        
+        const response = await fetch('/api/v1/datasources/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        console.log('API response status:', response.status);
+        console.log('API response headers:', Object.fromEntries(response.headers));
+        
+        if (!response.ok) {
+            let errorMessage = `HTTP ${response.status}`;
+            try {
+                const errorData = await response.json();
+                console.error('API error response:', errorData);
+                errorMessage = errorData.detail || errorMessage;
+            } catch (e) {
+                console.error('Failed to parse error response:', e);
+            }
+            throw new Error(errorMessage);
+        }
+        
+        const result = await response.json();
+        console.log('API success response:', result);
+        
+        if (window.showToast) {
+            showToast('Data source created successfully!', 'success');
+        } else {
+            alert('Data source created successfully!');
+        }
+        
+        // Close modal and reset form
+        const modalElement = document.getElementById('addDataSourceModal');
+        if (modalElement) {
+            const modal = bootstrap.Modal.getInstance(modalElement);
+            if (modal) {
+                modal.hide();
+            }
+        }
+        form.reset();
+        
+        // Refresh the list
+        loadDataSources();
+        
+    } catch (error) {
+        console.error('Failed to create data source:', error);
+        if (window.showToast) {
+            showToast('Failed to create data source: ' + error.message, 'danger');
+        } else {
+            alert('Failed to create data source: ' + error.message);
+        }
+    } finally {
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    }
+}
+
+async function testConnection() {
+    console.log('Test Connection button clicked!');
+    
+    const form = document.getElementById('data-source-form');
+    if (!form) {
+        console.error('Form not found');
+        return;
+    }
+    
+    const formData = new FormData(form);
+    
+    const connectionConfig = {
+        host: formData.get('host'),
+        port: formData.get('port'),
+        username: formData.get('username'),
+        password: formData.get('password'),
+        database: formData.get('database')
+    };
+    
+    const type = formData.get('type') || 'database';
+    
+    console.log('Testing connection with config:', connectionConfig);
+    
+    try {
+        if (window.showToast) {
+            showToast('Testing connection...', 'info');
+        }
+        
+        const response = await fetch('/api/v1/datasources/test-connection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                connection_config: connectionConfig,
+                type: type
+            })
+        });
+        
+        const result = await response.json();
+        console.log('Connection test result:', result);
+        
+        let resultHtml = '';
+        if (result.success) {
+            resultHtml = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>Connection Successful!</strong>
+                    <p class="mb-0">${result.message}</p>
+                </div>
+            `;
+            
+            if (result.server_info) {
+                resultHtml += `
+                    <div class="mt-3">
+                        <h6>Server Information:</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Version:</strong> ${result.server_info.version}</li>
+                            <li><strong>Host:</strong> ${result.server_info.host}:${result.server_info.port}</li>
+                            <li><strong>Database:</strong> ${result.server_info.database}</li>
+                        </ul>
+                    </div>
+                `;
+                
+                if (result.server_info.available_databases && result.server_info.available_databases.length > 0) {
+                    resultHtml += `
+                        <div class="mt-2">
+                            <h6>Available Databases:</h6>
+                            <div>${result.server_info.available_databases.map(db => `<span class="badge bg-info me-1">${db}</span>`).join('')}</div>
+                        </div>
+                    `;
+                }
+            }
+            
+            if (window.showToast) {
+                showToast('Connection test successful!', 'success');
+            }
+        } else {
+            resultHtml = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Connection Failed!</strong>
+                    <p class="mb-0">${result.message}</p>
+                </div>
+            `;
+            if (window.showToast) {
+                showToast('Connection test failed!', 'danger');
+            }
+        }
+        
+        const resultContainer = document.getElementById('connection-test-result');
+        if (resultContainer) {
+            resultContainer.innerHTML = resultHtml;
+            
+            // Show result modal
+            const modalElement = document.getElementById('connectionTestModal');
+            if (modalElement) {
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            }
+        }
+        
+    } catch (error) {
+        console.error('Connection test error:', error);
+        if (window.showToast) {
+            showToast('Connection test error: ' + error.message, 'danger');
+        } else {
+            alert('Connection test error: ' + error.message);
+        }
+    }
+}
+
+async function testConnectionForDataSource(dataSourceId) {
+    try {
+        if (window.showToast) {
+            showToast('Testing connection...', 'info');
+        }
+        
+        const response = await fetch(`/api/v1/datasources/${dataSourceId}/health`);
+        const result = await response.json();
+        
+        if (result.status === 'healthy') {
+            if (window.showToast) {
+                showToast('Connection is healthy!', 'success');
+            } else {
+                alert('Connection is healthy!');
+            }
+        } else {
+            if (window.showToast) {
+                showToast(`Connection unhealthy: ${result.message}`, 'warning');
+            } else {
+                alert(`Connection unhealthy: ${result.message}`);
+            }
+        }
+        
+    } catch (error) {
+        console.error('Health check error:', error);
+        if (window.showToast) {
+            showToast('Health check failed: ' + error.message, 'danger');
+        } else {
+            alert('Health check failed: ' + error.message);
+        }
+    }
+}
+
+async function scanMetadata(dataSourceId) {
+    try {
+        if (window.showToast) {
+            showToast('Scanning metadata...', 'info');
+        }
+        
+        const response = await fetch(`/api/v1/datasources/${dataSourceId}/scan`, {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            const metadata = result.metadata;
+            const message = `Metadata scan completed! Found ${metadata.total_tables} tables with ${metadata.total_columns} columns`;
+            if (window.showToast) {
+                showToast(message, 'success');
+            } else {
+                alert(message);
+            }
+        } else {
+            const message = `Metadata scan failed: ${result.message}`;
+            if (window.showToast) {
+                showToast(message, 'danger');
+            } else {
+                alert(message);
+            }
+        }
+        
+    } catch (error) {
+        console.error('Metadata scan error:', error);
+        const message = 'Metadata scan failed: ' + error.message;
+        if (window.showToast) {
+            showToast(message, 'danger');
+        } else {
+            alert(message);
+        }
+    }
+}
+
+async function deleteDataSource(dataSourceId) {
+    if (!confirm('Are you sure you want to delete this data source?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/v1/datasources/${dataSourceId}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            let errorMessage = `HTTP ${response.status}`;
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.detail || errorMessage;
+            } catch (e) {
+                console.error('Failed to parse error response:', e);
+            }
+            throw new Error(errorMessage);
+        }
+        
+        if (window.showToast) {
+            showToast('Data source deleted successfully!', 'success');
+        } else {
+            alert('Data source deleted successfully!');
+        }
+        loadDataSources(); // Refresh the list
+        
+    } catch (error) {
+        console.error('Delete error:', error);
+        const message = 'Failed to delete data source: ' + error.message;
+        if (window.showToast) {
+            showToast(message, 'danger');
+        } else {
+            alert(message);
+        }
+    }
+}
+</script>
+{% endblock %} 

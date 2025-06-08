@@ -1,0 +1,163 @@
+version: '3.8'
+
+services:
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: ontology-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Unity Catalog (using PostgreSQL)
+  unity-catalog:
+    image: postgres:15-alpine
+    container_name: ontology-unity-catalog
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: unity_catalog
+      POSTGRES_USER: unity
+      POSTGRES_PASSWORD: catalog123
+    volumes:
+      - unity_catalog_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unity -d unity_catalog"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MySQL Database for Development
+  mysql:
+    image: mysql:8.0
+    container_name: ontology-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: ontology_dev
+      MYSQL_USER: ontology_user
+      MYSQL_PASSWORD: ontology_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/mysql:/docker-entrypoint-initdb.d
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # PostgreSQL Database for Development
+  postgres:
+    image: postgres:15-alpine
+    container_name: ontology-postgres
+    ports:
+      - "5433:5432"  # Different port to avoid conflict with unity-catalog
+    environment:
+      POSTGRES_DB: ontology_dev
+      POSTGRES_USER: ontology_user
+      POSTGRES_PASSWORD: ontology_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/postgres:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ontology_user -d ontology_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis for Caching (Optional)
+  redis:
+    image: redis:7-alpine
+    container_name: ontology-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # PgAdmin for PostgreSQL Management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ontology-pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ontology.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+      - unity-catalog
+    restart: unless-stopped
+
+  # phpMyAdmin for MySQL Management
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: ontology-phpmyadmin
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: rootpassword
+      MYSQL_ROOT_PASSWORD: rootpassword
+    depends_on:
+      - mysql
+    restart: unless-stopped
+
+  # Ontology Application
+  ontology-app:
+    build: .
+    container_name: ontology-app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - minio
+      - unity-catalog
+      - mysql
+      - postgres
+      - redis
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - UC_ENDPOINT=http://unity-catalog:5432
+      - OLLAMA_ENDPOINT=http://host.docker.internal:11434
+      - DATABASE_URL=sqlite:///./ontology.db
+      # Database connection strings
+      - MYSQL_URL=mysql://ontology_user:ontology_password@mysql:3306/ontology_dev
+      - POSTGRES_URL=postgresql://ontology_user:ontology_password@postgres:5432/ontology_dev
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    restart: unless-stopped
+
+volumes:
+  minio_data:
+  unity_catalog_data:
+  mysql_data:
+  postgres_data:
+  redis_data:
+  pgadmin_data: 
